@@ -104,8 +104,12 @@ it. Without that you cannot tell which of the seven components failed.
 
 ## Setup needed before code
 
-Not design decisions, just things to install:
+Not design decisions, just things to install. All run locally via
+`docker-compose.yml` at the repo root:
 
-- Qdrant
-- Postgres
+- Qdrant — `http://localhost:6333`
+- Postgres — `localhost:5432`
+- pgAdmin — `http://localhost:5050`, for looking at the ledger table
 - An OpenRouter API key in `.env`
+
+Only OpenRouter needs an account. The rest are open source containers.

@@ -1,0 +1,49 @@
+# Local services for the projects in this repo.
+#   docker compose up -d     start
+#   docker compose down      stop, keeping data
+#   docker compose down -v   stop and wipe data
+
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.19.0
+    container_name: agentic-rag-qdrant
+    ports:
+      - "6333:6333"   # HTTP API and dashboard
+      - "6334:6334"   # gRPC
+    volumes:
+      - qdrant-data:/qdrant/storage
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:17
+    container_name: agentic-rag-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-agentic}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-agentic}
+      POSTGRES_DB: ${POSTGRES_DB:-agentic_rag}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  # Browse the Postgres tables at http://localhost:5050
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: agentic-rag-pgadmin
+    ports:
+      - "5050:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@local.dev}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
+volumes:
+  qdrant-data:
+  postgres-data:
+  pgadmin-data:
