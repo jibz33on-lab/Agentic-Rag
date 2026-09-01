@@ -29,5 +29,12 @@ jobs:
         # Exit code 5 means "no tests collected", which is expected until the
         # first mini project lands. Drop this tolerance once one exists.
         run: |
-          uv run pytest; code=$?
-          [ "$code" -eq 0 ] || [ "$code" -eq 5 ]
+          set +e
+          uv run pytest
+          status=$?
+          set -e
+          if [ "$status" -eq 5 ]; then
+            echo "::notice::No tests collected yet - expected until the first project lands."
+            exit 0
+          fi
+          exit "$status"
