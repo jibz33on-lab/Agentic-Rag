@@ -48,7 +48,52 @@ When the user says **"Design is clear"**, stop asking questions and write a shor
 - **Interfaces** — modules touched and how their interfaces change
 - **Open questions** — anything deliberately deferred
 
+Write it to `projects/NN-name/designs/<component>.md` — one file per design
+session, named for the component it covers in `DOMAIN_TERMS.md` vocabulary. Then
+add a line for it under `## Designs` in that project's `README.md`, so the doc is
+findable by someone who does not already know it exists.
+
+A PRD that stays in the chat window is lost the moment the session ends. The
+decisions are worth more than the conversation that produced them.
+
 Keep it short enough to read in one sitting. It is a shared record of the decision, not a specification document.
+
+### When the session ends another way
+
+Not every session ends in a design. It can also end because the feature turned out
+to be several features, because we do not know enough yet to decide, or because the
+grilling showed it is not worth building.
+
+These are real outcomes, not failed sessions. Record them the same way — same
+folder, same `README.md` line — but keep it to a few sentences:
+
+- **What we set out to design**
+- **How it ended** — split, deferred, or dropped
+- **Why** — the thing we learned that ended it
+- **What happens next**, if anything
+
+Short and plain is the point. It exists so the next session does not rediscover
+what this one already worked out.
+
+## After the PRD
+
+Only when the session produced a design. If it ended split, deferred or dropped,
+stop at the write-up.
+
+The session ends; the handoff does not. In order:
+
+1. **Describe the implementation at a high level** — in the conversation, not in a
+   document. Which modules get built, in what order, and what each one does. No
+   code. The PRD is the only written artifact this whole path produces.
+2. **Ask about the plan.** Same rules as the interview: one question at a time,
+   each carrying the decision it feeds.
+3. **Hand off to `tdd-workflow`.** Once the plan is agreed, propose the first
+   failing test. Implementation code comes after that test exists and fails —
+   never before, and never straight off the back of the design session.
+
+If the plan turns out to need an interface the design session did not settle, stop
+and go back rather than deciding it here — see `deep-modules`. A plan is not
+permission to widen an interface.
 
 ## Teaching
 
