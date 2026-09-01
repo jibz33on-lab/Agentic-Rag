@@ -94,10 +94,28 @@ it. Without that you cannot tell which of the seven components failed.
 - **`chunk_store` and `ingestion_ledger` stay separate components**, even though
   both are storage. Merging them would weld us to this pair of databases.
 
+## Models
+
+Both come from OpenRouter.
+
+| Job | Model | Notes |
+|---|---|---|
+| `embedding_strategy` | `baai/bge-m3` | 1024 dimensions, 8,194 token limit, $0.01/M tokens |
+| `answerer` | not chosen yet | 21 free options, plus paid |
+
+`bge-m3` was picked over cheaper models because most of those cap input at 512
+tokens, which would have put a ceiling on the chunk sizes we can compare. Cost is
+not a factor at this scale — a full re-ingest of a small corpus is a fraction of a
+penny.
+
+Changing the embedding model changes the vector size, so it needs a fresh Qdrant
+collection, not just a re-ingest. The `chunk_store` has to handle that.
+
 ## Open questions
 
 - Chunk size and how many `chunk`s to retrieve. Settings to tune, not decisions to
   make cold.
+- Which model the `answerer` uses.
 - What exactly the `ingestion_ledger` table holds beyond file, hash and settings.
 - Whether to warn before a settings change re-ingests a large corpus. Not needed
   while the corpus is small.
