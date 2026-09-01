@@ -6,9 +6,10 @@ code, comments, tests, and docs — by both the human and the AI.
 Terms are written in `snake_case` because they double as code identifiers. If a
 term is ambiguous or missing, we stop and fix it here before writing more code.
 
-> **Status: draft.** These definitions were proposed by the AI from the term names
-> and the current repo layout. Review and correct them — a wrong definition here
-> propagates into every project.
+> **Review status.** `retrieval_strategy`, `retrieval_signals` and `agent` were
+> settled in a design session and are agreed. The rest are still AI-proposed drafts
+> from the term names and repo layout — review them before a project depends on
+> them, since a wrong definition here propagates everywhere.
 
 ---
 
@@ -24,28 +25,40 @@ A contiguous slice of exactly one `document`, sized for retrieval and embedding.
 Always knows which `document` it came from and where in it. Chunks are the unit
 that a `retrieval_strategy` returns.
 
-### `evidence_tier`
-How much a retrieved `chunk` should be trusted when the `agent` reasons over it.
-A ranking of source quality, not of similarity score — a strong keyword match from
-a weak source stays a weak tier. Assigned at ingestion, carried through retrieval.
-
 ---
 
 ## Doing the work
 
 ### `ingestion_job`
-One run that takes raw sources and produces stored `chunk`s: load, split, enrich
-with `evidence_tier`, embed, persist. Re-runnable, and reports what it wrote.
+One run that takes raw sources and produces stored `chunk`s: load, split, embed,
+persist. Re-runnable, and reports what it wrote.
 
 ### `retrieval_strategy`
-A named, swappable way of going from a query to a ranked list of `chunk`s — dense,
-keyword, hybrid, reranked, multi-hop. The thing being compared across projects, so
-strategies share one interface and can be substituted for each other.
+A named, swappable way of going from a query to ranked `chunk`s plus
+`retrieval_signals` — dense, keyword, hybrid, reranked, multi-hop. Fetches when
+asked and nothing more: it never interprets what it found or decides what happens
+next. The thing being compared across projects, so every strategy shares one
+interface and returns the same shape.
+
+### `retrieval_signals`
+What a `retrieval_strategy` noticed while fetching, returned alongside the
+`chunk`s. A fixed set of three, filled in by every strategy:
+
+- **weak match** — the best score was low, so likely nothing here answers the
+  query. Defined per strategy, since scores are not comparable across strategies.
+- **source concentration** — how few `document`s the returned `chunk`s came from.
+- **candidate count** — how many `chunk`s were considered before cutting to top-k.
+
+Observations, not judgements. Retrieval reports what it saw; the `agent` decides
+what it means. The set is fixed deliberately — adding a field later means editing
+every strategy that already exists.
 
 ### `agent`
 The component that decides what to do next: which `tool_call` to make, whether the
-evidence so far is enough, when to answer. Owns control flow. Distinct from
-`retrieval_strategy`, which only fetches when asked.
+evidence so far is enough, when to answer. Owns control flow, and owns all
+interpretation — reading `retrieval_signals`, noticing when sources disagree, and
+deciding to answer from the best match while quoting what contradicts it.
+Distinct from `retrieval_strategy`, which only fetches when asked.
 
 ### `tool_call`
 One invocation of a capability by the `agent` — a retrieval, a search, a
