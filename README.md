@@ -8,7 +8,7 @@ generation. Each project stands on its own; shared building blocks get promoted 
 
 | # | Project | What it explores | Status |
 |---|---------|------------------|--------|
-| — | _first project not started yet_ | — | — |
+| 01 | [basic-rag](projects/01-basic-rag/) | every part of a RAG system, thin, wired end to end | designed, not built |
 
 ## Layout
 
