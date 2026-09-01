@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Environments
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Local vector stores / indexes / model caches
+.chroma/
+chroma/
+*.faiss
+*.sqlite3
+.lancedb/
+storage/
+data/raw/
+.cache/
+
+# Editors
+.idea/
+*.swp
+
+# macOS
+.DS_Store

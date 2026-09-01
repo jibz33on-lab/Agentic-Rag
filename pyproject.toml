@@ -1,0 +1,43 @@
+[project]
+name = "agentic-rag"
+version = "0.1.0"
+description = "A growing series of mini projects exploring agentic RAG."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-cov>=6.0",
+    "ruff>=0.9",
+]
+
+# Shared runtime dependencies are added here as projects need them, so every
+# project runs against one resolved environment (a single .venv, one uv.lock).
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # import sorting
+    "UP",  # pyupgrade
+    "B",   # bugbear
+    "SIM", # simplify
+    "RUF",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["projects"]  # add "shared" once that directory exists
+addopts = "-q --strict-markers"
+
+[tool.coverage.run]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 80
