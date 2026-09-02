@@ -4,7 +4,10 @@
 # re-export it, and no maintained package supplies a SQL-backed record
 # manager. langchain-postgres has PGVector but nothing equivalent. This is
 # the most fragile import in the project — see the design doc.
+from config import Config
 from langchain_community.indexes._sql_record_manager import SQLRecordManager
+from langchain_core.documents import Document
+from langchain_core.embeddings import Embeddings
 from langchain_core.indexing import index
 from langchain_openai import OpenAIEmbeddings
 from vector_store import open_vector_store
@@ -12,7 +15,7 @@ from vector_store import open_vector_store
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 
-def build_embeddings(config):
+def build_embeddings(config: Config) -> OpenAIEmbeddings:
     """The real embedding model, served by OpenRouter.
 
     check_embedding_ctx_length is off because the client would otherwise try
@@ -26,7 +29,7 @@ def build_embeddings(config):
     )
 
 
-def index_chunks(chunks, config, embeddings):
+def index_chunks(chunks: list[Document], config: Config, embeddings: Embeddings) -> dict[str, int]:
     """Index `chunks`, skipping any whose content is already stored.
 
     cleanup="scoped_full" with source_id_key="source" means an edited file has
@@ -51,7 +54,7 @@ def index_chunks(chunks, config, embeddings):
     )
 
 
-def _record_manager(config):
+def _record_manager(config: Config) -> SQLRecordManager:
     manager = SQLRecordManager(namespace=config.collection_name, db_url=config.postgres_url)
     manager.create_schema()
     return manager

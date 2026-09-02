@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from langchain_community.document_loaders import Docx2txtLoader, PyPDFLoader
+from langchain_core.documents import Document
 
 SUPPORTED_SUFFIXES = {".pdf", ".docx"}
 
@@ -16,11 +17,11 @@ class LoadFailure:
 
 @dataclass(frozen=True)
 class LoadResult:
-    documents: list
-    failures: list
+    documents: list[Document]
+    failures: list[LoadFailure]
 
 
-def load_documents(folder):
+def load_documents(folder: str | Path) -> LoadResult:
     """Load every supported file directly inside `folder`.
 
     Top level only — subfolders are not looked at, and anything that is not a
@@ -42,7 +43,7 @@ def load_documents(folder):
     return LoadResult(documents=documents, failures=failures)
 
 
-def supported_files(folder):
+def supported_files(folder: str | Path) -> list[Path]:
     return sorted(
         path
         for path in Path(folder).iterdir()
@@ -50,7 +51,7 @@ def supported_files(folder):
     )
 
 
-def _load_one(path):
+def _load_one(path: Path) -> list[Document]:
     if path.suffix.lower() == ".pdf":
         return PyPDFLoader(str(path)).load()
     return Docx2txtLoader(str(path)).load()

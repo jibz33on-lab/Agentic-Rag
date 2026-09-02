@@ -1,5 +1,10 @@
 """Turns a question plus retrieved chunks into an answer."""
 
+from collections.abc import Iterator
+
+from config import Config
+from langchain_core.documents import Document
+from langchain_core.language_models import BaseChatModel
 from langchain_openai import ChatOpenAI
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
@@ -18,7 +23,7 @@ Question: {question}
 Answer:"""
 
 
-def build_chat_model(config):
+def build_chat_model(config: Config) -> ChatOpenAI:
     """The chat model, served by OpenRouter."""
     return ChatOpenAI(
         model=config.llm_model,
@@ -28,7 +33,7 @@ def build_chat_model(config):
     )
 
 
-def build_prompt(question, chunks):
+def build_prompt(question: str, chunks: list[Document]) -> str:
     """Lay the question and the retrieved chunks out for the model.
 
     Each excerpt is labelled with where it came from, so the model can point at
@@ -42,7 +47,7 @@ def build_prompt(question, chunks):
     return PROMPT.format(excerpts=excerpts, question=question)
 
 
-def stream_answer(question, chunks, model):
+def stream_answer(question: str, chunks: list[Document], model: BaseChatModel) -> Iterator[str]:
     """Yield the answer in pieces as the model produces them.
 
     Streaming does not make the answer arrive sooner, but it makes it start
@@ -53,7 +58,7 @@ def stream_answer(question, chunks, model):
         yield piece.content
 
 
-def answer_question(question, chunks, model):
+def answer_question(question: str, chunks: list[Document], model: BaseChatModel) -> str:
     """The whole answer, once it is finished.
 
     Built on stream_answer so there is one code path, and the streamed and

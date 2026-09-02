@@ -1,11 +1,13 @@
 """Opens the Qdrant collection for a given set of settings."""
 
+from config import Config
+from langchain_core.embeddings import Embeddings
 from langchain_qdrant import QdrantVectorStore
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams
 
 
-def open_vector_store(config, embeddings):
+def open_vector_store(config: Config, embeddings: Embeddings) -> QdrantVectorStore:
     """Return the collection for these settings, creating it if needed.
 
     The collection is named from the settings, so a different chunk size or

@@ -1,5 +1,6 @@
 """Reads settings from the environment and checks them before anything runs."""
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from urllib.parse import quote
 
@@ -70,7 +71,7 @@ class Config:
         )
 
 
-def _whole_number(env, name, default):
+def _whole_number(env: Mapping[str, str], name: str, default: int | str) -> int:
     raw = env.get(name) or default
     try:
         return int(raw)
@@ -78,11 +79,11 @@ def _whole_number(env, name, default):
         raise ValueError(f"{name} must be a whole number, got {raw!r}") from None
 
 
-def _text(env, name, default):
+def _text(env: Mapping[str, str], name: str, default: str) -> str:
     return env.get(name) or default
 
 
-def load_config(env):
+def load_config(env: Mapping[str, str]) -> Config:
     api_key = env.get("OPENROUTER_API_KEY")
     if not api_key:
         raise ValueError("OPENROUTER_API_KEY is missing")

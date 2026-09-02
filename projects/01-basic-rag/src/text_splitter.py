@@ -1,9 +1,12 @@
 """Cuts loaded documents into chunks sized for retrieval."""
 
+from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 
-def split_documents(documents, chunk_size, chunk_overlap):
+def split_documents(
+    documents: list[Document], chunk_size: int, chunk_overlap: int
+) -> list[Document]:
     """Split `documents` into overlapping chunks.
 
     Sizes are in characters, not tokens. The splitter prefers to break at

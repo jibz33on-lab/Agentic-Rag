@@ -1,9 +1,12 @@
 """Finds the chunks closest to a question."""
 
+from config import Config
+from langchain_core.documents import Document
+from langchain_core.embeddings import Embeddings
 from vector_store import open_vector_store
 
 
-def retrieve(query, config, embeddings, k):
+def retrieve(query: str, config: Config, embeddings: Embeddings, k: int) -> list[Document]:
     """Return the `k` chunks nearest to `query`.
 
     No chat model is involved. The query is turned into numbers by the same
