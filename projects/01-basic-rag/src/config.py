@@ -1,11 +1,19 @@
 """Reads settings from the environment and checks them before anything runs."""
 
 from dataclasses import dataclass
+from urllib.parse import quote
 
 DEFAULT_EMBEDDING_MODEL = "baai/bge-m3"
 DEFAULT_EMBEDDING_DIMENSIONS = 1024
 DEFAULT_CHUNK_SIZE = 1000
 DEFAULT_CHUNK_OVERLAP = 200
+
+# Defaults match docker-compose.yml at the repo root.
+DEFAULT_POSTGRES_USER = "agentic"
+DEFAULT_POSTGRES_PASSWORD = "agentic"
+DEFAULT_POSTGRES_HOST = "localhost"
+DEFAULT_POSTGRES_PORT = 5432
+DEFAULT_POSTGRES_DB = "agentic_rag"
 
 
 @dataclass(frozen=True)
@@ -15,6 +23,11 @@ class Config:
     embedding_dimensions: int
     chunk_size: int
     chunk_overlap: int
+    postgres_user: str
+    postgres_password: str
+    postgres_host: str
+    postgres_port: int
+    postgres_db: str
 
     @property
     def collection_name(self) -> str:
@@ -30,6 +43,24 @@ class Config:
         model = self.embedding_model.rsplit("/", 1)[-1]
         return f"{model}-{self.chunk_size}-{self.chunk_overlap}"
 
+    @property
+    def postgres_url(self) -> str:
+        """Where the record manager keeps track of what has been indexed.
+
+        The +psycopg suffix picks psycopg 3, which is what is installed.
+        Without it SQLAlchemy reaches for psycopg2 and fails on import.
+
+        User and password are escaped because a generated password containing
+        @ or / would otherwise produce a URL no parser can read, and the error
+        it causes looks nothing like its cause.
+        """
+        user = quote(self.postgres_user, safe="")
+        password = quote(self.postgres_password, safe="")
+        return (
+            f"postgresql+psycopg://{user}:{password}"
+            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+        )
+
 
 def _whole_number(env, name, default):
     raw = env.get(name) or default
@@ -37,6 +68,10 @@ def _whole_number(env, name, default):
         return int(raw)
     except ValueError:
         raise ValueError(f"{name} must be a whole number, got {raw!r}") from None
+
+
+def _text(env, name, default):
+    return env.get(name) or default
 
 
 def load_config(env):
@@ -52,4 +87,9 @@ def load_config(env):
         ),
         chunk_size=_whole_number(env, "CHUNK_SIZE", DEFAULT_CHUNK_SIZE),
         chunk_overlap=_whole_number(env, "CHUNK_OVERLAP", DEFAULT_CHUNK_OVERLAP),
+        postgres_user=_text(env, "POSTGRES_USER", DEFAULT_POSTGRES_USER),
+        postgres_password=_text(env, "POSTGRES_PASSWORD", DEFAULT_POSTGRES_PASSWORD),
+        postgres_host=_text(env, "POSTGRES_HOST", DEFAULT_POSTGRES_HOST),
+        postgres_port=_whole_number(env, "POSTGRES_PORT", DEFAULT_POSTGRES_PORT),
+        postgres_db=_text(env, "POSTGRES_DB", DEFAULT_POSTGRES_DB),
     )

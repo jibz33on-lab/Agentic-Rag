@@ -48,3 +48,29 @@ def test_collection_name_changes_when_overlap_changes():
     env = {"OPENROUTER_API_KEY": "sk-or-test", "CHUNK_OVERLAP": "400"}
 
     assert load_config(env).collection_name == "bge-m3-1000-400"
+
+
+def test_builds_postgres_url_from_parts():
+    config = load_config(
+        env={
+            "OPENROUTER_API_KEY": "sk-or-test",
+            "POSTGRES_USER": "agentic",
+            "POSTGRES_PASSWORD": "agentic",
+            "POSTGRES_HOST": "localhost",
+            "POSTGRES_PORT": "5432",
+            "POSTGRES_DB": "agentic_rag",
+        }
+    )
+
+    assert (
+        config.postgres_url
+        == "postgresql+psycopg://agentic:agentic@localhost:5432/agentic_rag"
+    )
+
+
+def test_escapes_special_characters_in_the_postgres_password():
+    config = load_config(
+        env={"OPENROUTER_API_KEY": "sk-or-test", "POSTGRES_PASSWORD": "p@ss/word"}
+    )
+
+    assert "p%40ss%2Fword" in config.postgres_url
