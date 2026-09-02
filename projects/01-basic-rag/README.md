@@ -1,11 +1,13 @@
-# 01 — Basic RAG
+# 01 — Basic RAG with LangChain
 
-The thinnest possible version of every part of a RAG system, wired end to end.
+A plain RAG system built with LangChain, used directly — no wrapper layer of our
+own.
 
-The point is to see the whole shape working, not to make any single part good.
-Depth comes afterwards, one component at a time.
+This is the first half of a comparison. Project 02 will build the same thing with
+LlamaIndex, in parallel rather than as a swap, so the two can be judged on what
+each is actually like to use.
 
-Plain RAG — no `agent`, no evaluation. Those come later.
+Plain RAG — no agents, no evaluation yet.
 
 ## Designs
 
