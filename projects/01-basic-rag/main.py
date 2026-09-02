@@ -9,6 +9,7 @@ Run from the repo root, so that DATA_FOLDER and .env resolve.
 import argparse
 import os
 import sys
+import time
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -62,11 +63,17 @@ def ask(config):
         if question.lower() in {"quit", "exit"}:
             return
 
+        started = time.monotonic()
         chunks = retrieve(question, config, embeddings, config.top_k)
+        retrieved = time.monotonic()
 
         print()
+        first_token = None
         for piece in stream_answer(question, chunks, model):
+            if first_token is None and piece:
+                first_token = time.monotonic()
             print(piece, end="", flush=True)
+        finished = time.monotonic()
         print("\n")
 
         # Printed every time on purpose: when an answer is wrong, this is how
@@ -76,7 +83,16 @@ def ask(config):
             source = Path(chunk.metadata.get("source", "?")).name
             page = chunk.metadata.get("page", "-")
             print(f"  [{i}] {source}  page {page}")
-        print()
+
+        # Timings are printed because latency here varies a lot: OpenRouter
+        # routes to whichever of ~30 providers is serving the model, and they
+        # differ. Splitting it out shows whether a slow answer was retrieval,
+        # a slow provider, or simply a long answer.
+        print(
+            f"\n  {retrieved - started:.1f}s retrieval"
+            f" | {(first_token or finished) - retrieved:.1f}s to first word"
+            f" | {finished - started:.1f}s total\n"
+        )
 
 
 def main():
