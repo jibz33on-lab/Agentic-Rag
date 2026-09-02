@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from answerer import answer_question, build_chat_model
+from answerer import build_chat_model, stream_answer
 from config import load_config
 from document_loader import load_documents
 from indexing import build_embeddings, index_chunks
@@ -63,7 +63,11 @@ def ask(config):
             return
 
         chunks = retrieve(question, config, embeddings, config.top_k)
-        print(f"\n{answer_question(question, chunks, model)}\n")
+
+        print()
+        for piece in stream_answer(question, chunks, model):
+            print(piece, end="", flush=True)
+        print("\n")
 
         # Printed every time on purpose: when an answer is wrong, this is how
         # you tell whether retrieval found the wrong text or the model misread

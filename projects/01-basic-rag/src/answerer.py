@@ -42,6 +42,21 @@ def build_prompt(question, chunks):
     return PROMPT.format(excerpts=excerpts, question=question)
 
 
+def stream_answer(question, chunks, model):
+    """Yield the answer in pieces as the model produces them.
+
+    Streaming does not make the answer arrive sooner, but it makes it start
+    arriving. Waiting for a whole answer in silence feels far longer than
+    reading one as it is written.
+    """
+    for piece in model.stream(build_prompt(question, chunks)):
+        yield piece.content
+
+
 def answer_question(question, chunks, model):
-    """Ask `model` the question, given only `chunks` to work from."""
-    return model.invoke(build_prompt(question, chunks)).content
+    """The whole answer, once it is finished.
+
+    Built on stream_answer so there is one code path, and the streamed and
+    unstreamed answers cannot drift apart.
+    """
+    return "".join(stream_answer(question, chunks, model))
