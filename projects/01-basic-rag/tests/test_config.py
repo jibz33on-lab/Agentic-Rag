@@ -62,15 +62,10 @@ def test_builds_postgres_url_from_parts():
         }
     )
 
-    assert (
-        config.postgres_url
-        == "postgresql+psycopg://agentic:agentic@localhost:5432/agentic_rag"
-    )
+    assert config.postgres_url == "postgresql+psycopg://agentic:agentic@localhost:5432/agentic_rag"
 
 
 def test_escapes_special_characters_in_the_postgres_password():
-    config = load_config(
-        env={"OPENROUTER_API_KEY": "sk-or-test", "POSTGRES_PASSWORD": "p@ss/word"}
-    )
+    config = load_config(env={"OPENROUTER_API_KEY": "sk-or-test", "POSTGRES_PASSWORD": "p@ss/word"})
 
     assert "p%40ss%2Fword" in config.postgres_url

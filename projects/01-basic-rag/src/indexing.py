@@ -7,9 +7,7 @@
 from langchain_community.indexes._sql_record_manager import SQLRecordManager
 from langchain_core.indexing import index
 from langchain_openai import OpenAIEmbeddings
-from langchain_qdrant import QdrantVectorStore
-from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams
+from vector_store import open_vector_store
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
@@ -38,7 +36,7 @@ def index_chunks(chunks, config, embeddings):
     return index(
         chunks,
         _record_manager(config),
-        _vector_store(config, embeddings),
+        open_vector_store(config, embeddings),
         # scoped_full, not incremental. Incremental cleans up after every
         # batch, so a file whose chunks straddle a batch boundary has its
         # tail deleted by one batch and re-added by the next, on every run.
@@ -50,20 +48,6 @@ def index_chunks(chunks, config, embeddings):
         # only accepts an integer or a UUID as a point ID, and sha256 or
         # blake2b produce digests too long to be either. Collision resistance
         # is not in our threat model: these are local files we control.
-    )
-
-
-def _vector_store(config, embeddings):
-    client = QdrantClient(url=config.qdrant_url)
-    if not client.collection_exists(config.collection_name):
-        client.create_collection(
-            collection_name=config.collection_name,
-            vectors_config=VectorParams(size=config.embedding_dimensions, distance=Distance.COSINE),
-        )
-    return QdrantVectorStore(
-        client=client,
-        collection_name=config.collection_name,
-        embedding=embeddings,
     )
 
 
