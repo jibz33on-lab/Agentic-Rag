@@ -24,3 +24,27 @@ def test_defaults_embedding_dimensions_to_1024():
     config = load_config(env={"OPENROUTER_API_KEY": "sk-or-test"})
 
     assert config.embedding_dimensions == 1024
+
+
+def test_builds_collection_name_from_settings():
+    config = load_config(
+        env={
+            "OPENROUTER_API_KEY": "sk-or-test",
+            "EMBEDDING_MODEL": "baai/bge-m3",
+            "CHUNK_SIZE": "500",
+        }
+    )
+
+    assert config.collection_name == "bge-m3-500-200"
+
+
+def test_uses_default_collection_when_no_settings_given():
+    config = load_config(env={"OPENROUTER_API_KEY": "sk-or-test"})
+
+    assert config.collection_name == "bge-m3-1000-200"
+
+
+def test_collection_name_changes_when_overlap_changes():
+    env = {"OPENROUTER_API_KEY": "sk-or-test", "CHUNK_OVERLAP": "400"}
+
+    assert load_config(env).collection_name == "bge-m3-1000-400"
