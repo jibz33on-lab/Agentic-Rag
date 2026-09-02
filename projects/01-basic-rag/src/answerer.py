@@ -3,6 +3,7 @@
 from collections.abc import Iterator
 
 from config import Config
+from guardrails import check_answer_is_not_empty
 from langchain_core.documents import Document
 from langchain_core.language_models import BaseChatModel
 from langchain_openai import ChatOpenAI
@@ -24,12 +25,24 @@ Answer:"""
 
 
 def build_chat_model(config: Config) -> ChatOpenAI:
-    """The chat model, served by OpenRouter."""
+    """The chat model, served by OpenRouter.
+
+    Reasoning is switched off. It is on by default — we never asked for it —
+    and it costs about 1.5 seconds before any answer starts, because the model
+    thinks first and that thinking is not shown. Worse, it sometimes wanders
+    off and returns no answer at all.
+
+    LangChain has no parameter for this because it is an OpenRouter feature,
+    so it goes through extra_body, which passes options straight to the
+    provider. It is also why the thinking was invisible: LangChain reads the
+    stream, keeps `content`, and silently drops the `reasoning` field.
+    """
     return ChatOpenAI(
         model=config.llm_model,
         api_key=config.openrouter_api_key,
         base_url=OPENROUTER_BASE_URL,
         temperature=0,
+        extra_body={"reasoning": {"enabled": False}},
     )
 
 
@@ -54,8 +67,11 @@ def stream_answer(question: str, chunks: list[Document], model: BaseChatModel) -
     arriving. Waiting for a whole answer in silence feels far longer than
     reading one as it is written.
     """
+    answer = ""
     for piece in model.stream(build_prompt(question, chunks)):
+        answer += piece.content
         yield piece.content
+    check_answer_is_not_empty(answer)
 
 
 def answer_question(question: str, chunks: list[Document], model: BaseChatModel) -> str:

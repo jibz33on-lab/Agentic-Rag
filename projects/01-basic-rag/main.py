@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 from answerer import build_chat_model, stream_answer
 from config import load_config
 from document_loader import load_documents
+from guardrails import NoAnswerError
 from indexing import build_embeddings, index_chunks
 from retrieval import retrieve
 from text_splitter import split_documents
@@ -109,7 +110,11 @@ def ask(config):
         show, timings = streaming_printer()
 
         print()
-        result = answer_one(question, config, embeddings, model, show)
+        try:
+            result = answer_one(question, config, embeddings, model, show)
+        except NoAnswerError as error:
+            print(f"\n  {error}\n")
+            continue
         finished = time.monotonic()
         print("\n")
 
