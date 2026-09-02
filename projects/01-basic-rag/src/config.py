@@ -9,6 +9,7 @@ DEFAULT_CHUNK_SIZE = 1000
 DEFAULT_CHUNK_OVERLAP = 200
 
 # Defaults match docker-compose.yml at the repo root.
+DEFAULT_QDRANT_URL = "http://localhost:6333"
 DEFAULT_POSTGRES_USER = "agentic"
 DEFAULT_POSTGRES_PASSWORD = "agentic"
 DEFAULT_POSTGRES_HOST = "localhost"
@@ -23,6 +24,7 @@ class Config:
     embedding_dimensions: int
     chunk_size: int
     chunk_overlap: int
+    qdrant_url: str
     postgres_user: str
     postgres_password: str
     postgres_host: str
@@ -87,6 +89,7 @@ def load_config(env):
         ),
         chunk_size=_whole_number(env, "CHUNK_SIZE", DEFAULT_CHUNK_SIZE),
         chunk_overlap=_whole_number(env, "CHUNK_OVERLAP", DEFAULT_CHUNK_OVERLAP),
+        qdrant_url=_text(env, "QDRANT_URL", DEFAULT_QDRANT_URL),
         postgres_user=_text(env, "POSTGRES_USER", DEFAULT_POSTGRES_USER),
         postgres_password=_text(env, "POSTGRES_PASSWORD", DEFAULT_POSTGRES_PASSWORD),
         postgres_host=_text(env, "POSTGRES_HOST", DEFAULT_POSTGRES_HOST),
