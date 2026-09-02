@@ -37,6 +37,9 @@ services:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@local.dev}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
       PGADMIN_CONFIG_SERVER_MODE: "False"
+      # No master password prompt. It only encrypts passwords pgAdmin
+      # itself remembers, which is pointless for a local container.
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
     volumes:
       - pgadmin-data:/var/lib/pgadmin
     depends_on:
