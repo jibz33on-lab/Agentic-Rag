@@ -15,8 +15,50 @@ Plain RAG — no agents, no evaluation yet.
 
 ## Running it
 
-Not built yet.
+Start the services and fill in `.env` first (see the repo root README), then run
+from the repo root:
+
+```bash
+# read data/, split, embed, store. Re-run whenever you add or change a file.
+uv run python projects/01-basic-rag/main.py ingest
+
+# ask questions
+uv run python projects/01-basic-rag/main.py ask
+```
+
+`ingest` is safe to re-run: unchanged files are skipped, edited files replace
+their old chunks. Change `CHUNK_SIZE` or `EMBEDDING_MODEL` in `.env` and it
+indexes into a different collection, leaving the old one intact for comparison.
+
+Every answer prints the chunks it came from. When an answer is wrong, that tells
+you whether retrieval found the wrong text or the model misread the right text.
+
+Traces appear in LangSmith under the project named by `LANGSMITH_PROJECT`.
+
+## The parts
+
+| File | What it does |
+|---|---|
+| `config.py` | reads and checks settings, derives the collection name |
+| `document_loader.py` | PDFs and docx from a folder, skipping what will not read |
+| `text_splitter.py` | documents into overlapping chunks |
+| `vector_store.py` | opens the Qdrant collection for these settings |
+| `indexing.py` | embeds and stores, skipping what is already there |
+| `retrieval.py` | question to nearest chunks |
+| `answerer.py` | question plus chunks to an answer |
+| `main.py` | the terminal command |
 
 ## What was learned
 
-Nothing yet.
+- `index()` hashes file contents, not your settings. Change the chunk size and
+  every file looks unchanged, so the new setting silently never reaches the
+  store. Hence the collection name being built from the settings.
+- `cleanup="incremental"` cleans up after every batch of 100, so a file whose
+  chunks straddle a batch boundary gets its tail deleted and re-added on every
+  run. `scoped_full` cleans up once at the end instead.
+- Qdrant point IDs must be an integer or a UUID, so LangChain's suggestion to
+  move off SHA-1 hashing cannot be taken here.
+- `dotenv_values()` returns a dict and does not touch `os.environ`. LangSmith
+  reads `os.environ`, so tracing stays silently off without `load_dotenv()`.
+- `SQLRecordManager` lives in a private module of a sunset package, and nothing
+  maintained replaces it. The most fragile import in the project.

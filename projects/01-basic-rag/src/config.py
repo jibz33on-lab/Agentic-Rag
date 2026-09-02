@@ -10,6 +10,8 @@ DEFAULT_CHUNK_OVERLAP = 200
 
 # Defaults match docker-compose.yml at the repo root.
 DEFAULT_LLM_MODEL = "deepseek/deepseek-v4-flash-0731"
+DEFAULT_DATA_FOLDER = "data"
+DEFAULT_TOP_K = 4
 DEFAULT_QDRANT_URL = "http://localhost:6333"
 DEFAULT_POSTGRES_USER = "agentic"
 DEFAULT_POSTGRES_PASSWORD = "agentic"
@@ -26,6 +28,8 @@ class Config:
     embedding_dimensions: int
     chunk_size: int
     chunk_overlap: int
+    data_folder: str
+    top_k: int
     qdrant_url: str
     postgres_user: str
     postgres_password: str
@@ -92,6 +96,8 @@ def load_config(env):
         ),
         chunk_size=_whole_number(env, "CHUNK_SIZE", DEFAULT_CHUNK_SIZE),
         chunk_overlap=_whole_number(env, "CHUNK_OVERLAP", DEFAULT_CHUNK_OVERLAP),
+        data_folder=_text(env, "DATA_FOLDER", DEFAULT_DATA_FOLDER),
+        top_k=_whole_number(env, "TOP_K", DEFAULT_TOP_K),
         qdrant_url=_text(env, "QDRANT_URL", DEFAULT_QDRANT_URL),
         postgres_user=_text(env, "POSTGRES_USER", DEFAULT_POSTGRES_USER),
         postgres_password=_text(env, "POSTGRES_PASSWORD", DEFAULT_POSTGRES_PASSWORD),
