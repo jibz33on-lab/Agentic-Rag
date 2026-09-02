@@ -13,6 +13,10 @@ Plain RAG — no agents, no evaluation yet.
 
 - skeleton — [designs/skeleton.md](designs/skeleton.md)
 
+## Investigations
+
+- streaming latency — [investigations/streaming-latency.md](investigations/streaming-latency.md)
+
 ## Running it
 
 Start the services and fill in `.env` first (see the repo root README), then run
@@ -62,3 +66,7 @@ Traces appear in LangSmith under the project named by `LANGSMITH_PROJECT`.
   reads `os.environ`, so tracing stays silently off without `load_dotenv()`.
 - `SQLRecordManager` lives in a private module of a sunset package, and nothing
   maintained replaces it. The most fragile import in the project.
+- The model reasons before answering by a provider default nobody set, and
+  LangChain drops the `reasoning` field, so an 18-second wait arrives as chunks
+  that look empty. See the latency investigation. Reading the raw HTTP stream
+  was the only way to see it.
