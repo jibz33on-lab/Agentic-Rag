@@ -13,6 +13,7 @@ import time
 from pathlib import Path
 
 from dotenv import load_dotenv
+from langsmith import traceable
 
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
@@ -45,6 +46,47 @@ def ingest(config):
     )
 
 
+@traceable(name="rag_query", run_type="chain")
+def answer_one(question, config, embeddings, model, on_piece):
+    """Retrieve, then answer — as one traced unit.
+
+    The decorator is what makes LangSmith record retrieval and generation as
+    children of a single query, rather than as two unrelated top-level runs.
+    It is the difference between "an LLM call took 26s" and "this question
+    took 26s, of which 2s was retrieval".
+
+    on_piece is called with each piece as it arrives, so the caller can print
+    a streaming answer without the printing happening in here.
+    """
+    chunks = retrieve(question, config, embeddings, config.top_k)
+    answer = ""
+    for piece in stream_answer(question, chunks, model):
+        on_piece(piece)
+        answer += piece
+    return {
+        "answer": answer,
+        "chunks": [
+            {
+                "source": chunk.metadata.get("source"),
+                "page": chunk.metadata.get("page"),
+            }
+            for chunk in chunks
+        ],
+    }
+
+
+def streaming_printer():
+    """A printer that prints each piece and remembers when the first arrived."""
+    timings = {}
+
+    def show(piece):
+        if "first_token" not in timings and piece:
+            timings["first_token"] = time.monotonic()
+        print(piece, end="", flush=True)
+
+    return show, timings
+
+
 def ask(config):
     """Answer questions until you stop asking."""
     embeddings = build_embeddings(config)
@@ -64,34 +106,32 @@ def ask(config):
             return
 
         started = time.monotonic()
-        chunks = retrieve(question, config, embeddings, config.top_k)
-        retrieved = time.monotonic()
+        show, timings = streaming_printer()
 
         print()
-        first_token = None
-        for piece in stream_answer(question, chunks, model):
-            if first_token is None and piece:
-                first_token = time.monotonic()
-            print(piece, end="", flush=True)
+        result = answer_one(question, config, embeddings, model, show)
         finished = time.monotonic()
         print("\n")
+
+        chunks = result["chunks"]
+        first_token = timings.get("first_token", finished)
 
         # Printed every time on purpose: when an answer is wrong, this is how
         # you tell whether retrieval found the wrong text or the model misread
         # the right text.
         for i, chunk in enumerate(chunks, 1):
-            source = Path(chunk.metadata.get("source", "?")).name
-            page = chunk.metadata.get("page", "-")
-            print(f"  [{i}] {source}  page {page}")
+            source = Path(chunk.get("source") or "?").name
+            page = chunk.get("page")
+            print(f"  [{i}] {source}  page {page if page is not None else '-'}")
 
         # Timings are printed because latency here varies a lot: OpenRouter
         # routes to whichever of ~30 providers is serving the model, and they
         # differ. Splitting it out shows whether a slow answer was retrieval,
         # a slow provider, or simply a long answer.
         print(
-            f"\n  {retrieved - started:.1f}s retrieval"
-            f" | {(first_token or finished) - retrieved:.1f}s to first word"
-            f" | {finished - started:.1f}s total\n"
+            f"\n  {first_token - started:.1f}s to first word"
+            f" | {finished - started:.1f}s total"
+            f" | traced as rag_query\n"
         )
 
 
