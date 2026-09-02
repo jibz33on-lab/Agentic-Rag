@@ -9,6 +9,7 @@ DEFAULT_CHUNK_SIZE = 1000
 DEFAULT_CHUNK_OVERLAP = 200
 
 # Defaults match docker-compose.yml at the repo root.
+DEFAULT_LLM_MODEL = "deepseek/deepseek-v4-flash-0731"
 DEFAULT_QDRANT_URL = "http://localhost:6333"
 DEFAULT_POSTGRES_USER = "agentic"
 DEFAULT_POSTGRES_PASSWORD = "agentic"
@@ -21,6 +22,7 @@ DEFAULT_POSTGRES_DB = "agentic_rag"
 class Config:
     openrouter_api_key: str
     embedding_model: str
+    llm_model: str
     embedding_dimensions: int
     chunk_size: int
     chunk_overlap: int
@@ -84,6 +86,7 @@ def load_config(env):
     return Config(
         openrouter_api_key=api_key,
         embedding_model=env.get("EMBEDDING_MODEL") or DEFAULT_EMBEDDING_MODEL,
+        llm_model=_text(env, "LLM_MODEL", DEFAULT_LLM_MODEL),
         embedding_dimensions=_whole_number(
             env, "EMBEDDING_DIMENSIONS", DEFAULT_EMBEDDING_DIMENSIONS
         ),
