@@ -142,7 +142,7 @@ The same stream also contains OpenRouter keep-alive comment lines:
 
 ### The same chunks, seen through LangChain
 
-```python
+```
 AIMessageChunk(
     content='',
     additional_kwargs={},
