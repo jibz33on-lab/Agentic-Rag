@@ -19,7 +19,7 @@ BASE_URL = "https://openrouter.ai/api/v1"
 PROMPT = "In one sentence, what is a vector database?"
 
 env = dotenv_values(".env")
-model_name = env.get("LLM_MODEL") or "deepseek/deepseek-v4-flash-0731"
+model_name = env.get("ANSWERER_MODEL") or "deepseek/deepseek-v4-flash-0731"
 
 print(f"model     {model_name}")
 print(f"base url  {BASE_URL}")

@@ -24,7 +24,50 @@ Question: {question}
 Answer:"""
 
 
-def build_chat_model(config: Config) -> ChatOpenAI:
+class CostCapturingChatOpenAI(ChatOpenAI):
+    """A chat model that keeps the cost OpenRouter reports.
+
+    OpenRouter returns what a request actually cost. It knows which of its ~30
+    providers served the request, and they charge differently, so the figure is
+    the cost rather than an estimate — no price table of ours could reproduce it.
+
+    LangChain never surfaces it. `_create_usage_metadata` reads seven named keys
+    out of the provider's usage dict into a fixed `UsageMetadata`, and `cost` is
+    not one of them, so there is no flag to set and nothing to configure.
+    `_convert_chunk_to_generation_chunk` is the last place the raw dict still
+    exists, so the value is taken there.
+
+    That method is private API. When it changes, the cost quietly becomes None
+    and every evaluation_run loses its cost column without anything failing —
+    which is why test_keeps_the_openrouter_cost_that_langchain_drops exists.
+
+    The captured usage is per-instance and overwritten by each request. That is
+    safe only because evaluation asks one question at a time.
+    """
+
+    last_usage: dict | None = None
+
+    def _stream(self, *args, **kwargs):
+        """Clear the captured usage before each request.
+
+        Here rather than in the caller: a request that dies before reporting
+        usage would otherwise leave the previous question's cost in place, and
+        an evaluation_run would file it under the wrong golden_example without
+        anything looking wrong.
+        """
+        self.last_usage = None
+        yield from super()._stream(*args, **kwargs)
+
+    def _convert_chunk_to_generation_chunk(self, chunk, default_chunk_class, base_generation_info):
+        usage = chunk.get("usage")
+        if usage:
+            self.last_usage = dict(usage)
+        return super()._convert_chunk_to_generation_chunk(
+            chunk, default_chunk_class, base_generation_info
+        )
+
+
+def build_chat_model(config: Config) -> CostCapturingChatOpenAI:
     """The chat model, served by OpenRouter.
 
     Reasoning is switched off. It is on by default — we never asked for it —
@@ -37,12 +80,21 @@ def build_chat_model(config: Config) -> ChatOpenAI:
     provider. It is also why the thinking was invisible: LangChain reads the
     stream, keeps `content`, and silently drops the `reasoning` field.
     """
-    return ChatOpenAI(
-        model=config.llm_model,
+    return CostCapturingChatOpenAI(
+        model=config.answerer_model,
         api_key=config.openrouter_api_key,
         base_url=OPENROUTER_BASE_URL,
         temperature=0,
-        extra_body={"reasoning": {"enabled": False}},
+        # Off by default here, unlike against OpenAI: langchain_openai only
+        # auto-enables stream_usage when no base_url is set, on the grounds that
+        # many non-OpenAI endpoints cannot do it. OpenRouter can, and without
+        # this the request never asks for usage at all.
+        stream_usage=True,
+        extra_body={
+            "reasoning": {"enabled": False},
+            # OpenRouter's own switch for reporting cost, through the same door.
+            "usage": {"include": True},
+        },
     )
 
 

@@ -10,6 +10,11 @@ dependencies = [
     "langchain-community>=0.4.2",
     "langchain-openai>=1.6.0",
     "langchain-qdrant>=1.1.0",
+    # Both arrive transitively via langchain, and both are now imported
+    # directly — langsmith for reading traces back, openai for the evaluation
+    # generator and judge. A langchain bump must not be able to move them.
+    "langsmith>=0.12.1",
+    "openai>=3.7.0",
     "psycopg[binary]>=3.3.5",
     "pypdf>=6.16.2",
     "python-dotenv>=1.2.3",

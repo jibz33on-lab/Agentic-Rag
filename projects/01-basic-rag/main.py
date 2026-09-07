@@ -13,16 +13,15 @@ import time
 from pathlib import Path
 
 from dotenv import load_dotenv
-from langsmith import traceable
 
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from answerer import build_chat_model, stream_answer
+from answerer import build_chat_model
 from config import load_config
 from document_loader import load_documents
 from guardrails import NoAnswerError
 from indexing import build_embeddings, index_chunks
-from retrieval import retrieve
+from rag_query import rag_query
 from text_splitter import split_documents
 
 
@@ -47,35 +46,6 @@ def ingest(config):
     )
 
 
-@traceable(name="rag_query", run_type="chain")
-def answer_one(question, config, embeddings, model, on_piece):
-    """Retrieve, then answer — as one traced unit.
-
-    The decorator is what makes LangSmith record retrieval and generation as
-    children of a single query, rather than as two unrelated top-level runs.
-    It is the difference between "an LLM call took 26s" and "this question
-    took 26s, of which 2s was retrieval".
-
-    on_piece is called with each piece as it arrives, so the caller can print
-    a streaming answer without the printing happening in here.
-    """
-    chunks = retrieve(question, config, embeddings, config.top_k)
-    answer = ""
-    for piece in stream_answer(question, chunks, model):
-        on_piece(piece)
-        answer += piece
-    return {
-        "answer": answer,
-        "chunks": [
-            {
-                "source": chunk.metadata.get("source"),
-                "page": chunk.metadata.get("page"),
-            }
-            for chunk in chunks
-        ],
-    }
-
-
 def streaming_printer():
     """A printer that prints each piece and remembers when the first arrived."""
     timings = {}
@@ -92,7 +62,7 @@ def ask(config):
     """Answer questions until you stop asking."""
     embeddings = build_embeddings(config)
     model = build_chat_model(config)
-    print(f"{config.collection_name} | {config.llm_model}")
+    print(f"{config.collection_name} | {config.answerer_model}")
     print("Ask a question, or 'quit' to stop.\n")
 
     while True:
@@ -111,22 +81,21 @@ def ask(config):
 
         print()
         try:
-            result = answer_one(question, config, embeddings, model, show)
+            result = rag_query(question, config, embeddings, model, show)
         except NoAnswerError as error:
             print(f"\n  {error}\n")
             continue
         finished = time.monotonic()
         print("\n")
 
-        chunks = result["chunks"]
         first_token = timings.get("first_token", finished)
 
         # Printed every time on purpose: when an answer is wrong, this is how
         # you tell whether retrieval found the wrong text or the model misread
         # the right text.
-        for i, chunk in enumerate(chunks, 1):
-            source = Path(chunk.get("source") or "?").name
-            page = chunk.get("page")
+        for i, chunk in enumerate(result.chunks, 1):
+            source = Path(chunk.metadata.get("source") or "?").name
+            page = chunk.metadata.get("page")
             print(f"  [{i}] {source}  page {page if page is not None else '-'}")
 
         # Timings are printed because latency here varies a lot: OpenRouter

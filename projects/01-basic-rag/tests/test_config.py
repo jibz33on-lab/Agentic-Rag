@@ -69,3 +69,64 @@ def test_escapes_special_characters_in_the_postgres_password():
     config = load_config(env={"OPENROUTER_API_KEY": "sk-or-test", "POSTGRES_PASSWORD": "p@ss/word"})
 
     assert "p%40ss%2Fword" in config.postgres_url
+
+
+def test_does_not_raise_when_the_openai_api_key_is_missing():
+    """Deliberately unlike OPENROUTER_API_KEY, which raises three lines away.
+
+    ingest and ask never touch OpenAI, and must keep working for anyone who has
+    not set up a second provider. The evaluation commands check for it when they
+    run. Without this test the inconsistency looks like an oversight and gets
+    'fixed', and then reading PDFs starts demanding an OpenAI key.
+    """
+    config = load_config(env={"OPENROUTER_API_KEY": "sk-or-test"})
+
+    assert config.openai_api_key is None
+
+
+def test_returns_the_openai_api_key_when_present():
+    config = load_config(env={"OPENROUTER_API_KEY": "sk-or-test", "OPENAI_API_KEY": "sk-test"})
+
+    assert config.openai_api_key == "sk-test"
+
+
+def test_reads_the_answerer_model():
+    """ANSWERER_MODEL, not LLM_MODEL — the answerer is the thing it configures,
+    and DOMAIN_TERMS.md already has a word for that."""
+    config = load_config(env={"OPENROUTER_API_KEY": "sk-or-test", "ANSWERER_MODEL": "vendor/model"})
+
+    assert config.answerer_model == "vendor/model"
+
+
+def test_reads_the_generator_and_judge_models():
+    """The apparatus, pinned separately from the answerer under test."""
+    config = load_config(
+        env={
+            "OPENROUTER_API_KEY": "sk-or-test",
+            "GENERATOR_MODEL": "openai/generator",
+            "JUDGE_MODEL": "openai/judge",
+        }
+    )
+
+    assert config.generator_model == "openai/generator"
+    assert config.judge_model == "openai/judge"
+
+
+def test_defaults_the_evaluation_sampling_settings():
+    config = load_config(env={"OPENROUTER_API_KEY": "sk-or-test"})
+
+    assert config.eval_clusters == 12
+    assert config.eval_examples_per_cluster == 5
+
+
+def test_raises_when_eval_clusters_is_not_a_number():
+    with pytest.raises(ValueError, match="EVAL_CLUSTERS"):
+        load_config(env={"OPENROUTER_API_KEY": "sk-or-test", "EVAL_CLUSTERS": "twelve"})
+
+
+def test_keeps_evaluation_traces_out_of_the_application_project():
+    """Sixty machine-generated queries per run would bury the handful of real
+    ones. Cosmetic, not functional — system metrics read a specific run_id."""
+    config = load_config(env={"OPENROUTER_API_KEY": "sk-or-test"})
+
+    assert config.langsmith_eval_project == "01-basic-rag-eval"

@@ -1,14 +1,17 @@
+import os
 import sys
 import uuid
 from pathlib import Path
 
 import pytest
+from dotenv import dotenv_values
 
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from config import load_config
 
 FAKE_DIMENSIONS = 8
+REPO_ROOT = Path(__file__).parents[2]
 
 
 @pytest.fixture
@@ -38,3 +41,17 @@ def services(config):
         create_engine(config.postgres_url).connect().close()
     except Exception:
         pytest.skip("Postgres is not running")
+
+
+@pytest.fixture
+def live_openrouter_config():
+    """Config carrying the real OpenRouter key, or skip.
+
+    Reads .env directly, the way the scripts do, so the test runs locally
+    without anything being exported first. CI has no .env and no key, so it
+    skips there rather than failing — the same shape as `services`.
+    """
+    env = {**dotenv_values(REPO_ROOT / ".env"), **os.environ}
+    if not env.get("OPENROUTER_API_KEY"):
+        pytest.skip("OPENROUTER_API_KEY is not set")
+    return load_config(env)

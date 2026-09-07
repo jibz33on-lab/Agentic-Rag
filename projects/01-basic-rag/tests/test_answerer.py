@@ -1,6 +1,8 @@
-from answerer import build_prompt, stream_answer
+import pytest
+from answerer import build_chat_model, build_prompt, stream_answer
 from langchain_core.documents import Document
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
+from openai import APIError
 
 
 def test_prompt_includes_the_question_and_the_chunks():
@@ -20,3 +22,34 @@ def test_streams_the_answer_in_pieces():
 
     assert len(pieces) > 1
     assert "".join(pieces) == "hybrid search runs both"
+
+
+def test_keeps_the_openrouter_cost_that_langchain_drops(live_openrouter_config):
+    """OpenRouter reports the real cost; LangChain's usage_metadata has no slot
+    for it, so it is dropped. If this ever stops being captured, the cost column
+    in every evaluation_run silently empties — hence a test rather than a note.
+    """
+    model = build_chat_model(live_openrouter_config)
+
+    list(model.stream("Say the word yes."))
+
+    assert model.last_usage is not None
+    assert model.last_usage.get("cost") is not None
+
+
+def test_forgets_the_previous_cost_when_a_request_fails(live_openrouter_config):
+    """A failed request must not inherit the last one's cost.
+
+    The captured usage lives on the model instance, so without a reset a
+    request that dies before reporting usage leaves the previous question's
+    figure in place — and an evaluation_run would attribute it to the wrong
+    golden_example, silently.
+    """
+    model = build_chat_model(live_openrouter_config)
+    model.model_name = "definitely/not-a-real-model"
+    model.last_usage = {"cost": 99.0}
+
+    with pytest.raises(APIError):
+        list(model.stream("Say the word yes."))
+
+    assert model.last_usage is None

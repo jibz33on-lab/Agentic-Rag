@@ -21,7 +21,7 @@ import urllib.request
 from dotenv import dotenv_values
 
 env = dotenv_values(".env")
-model_name = env.get("LLM_MODEL") or "deepseek/deepseek-v4-flash-0731"
+model_name = env.get("ANSWERER_MODEL") or "deepseek/deepseek-v4-flash-0731"
 PROMPT = "In one sentence, what is a vector database?"
 
 reasoning_off = len(sys.argv) > 1 and sys.argv[1].lower() == "off"
@@ -58,7 +58,7 @@ with urllib.request.urlopen(request, timeout=180) as response:
         if not line.startswith("data: ") or line == "data: [DONE]":
             continue
         try:
-            payload = json.loads(line[len("data: "):])
+            payload = json.loads(line[len("data: ") :])
         except json.JSONDecodeError:
             continue
 

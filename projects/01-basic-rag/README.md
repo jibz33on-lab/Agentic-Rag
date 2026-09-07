@@ -12,10 +12,13 @@ Plain RAG — no agents, no evaluation yet.
 ## Designs
 
 - skeleton — [designs/skeleton.md](designs/skeleton.md)
+- evaluation — [designs/evaluation.md](designs/evaluation.md)
+- evaluation logic — [designs/evaluation-logic.md](designs/evaluation-logic.md)
 
 ## Investigations
 
 - streaming latency — [investigations/streaming-latency.md](investigations/streaming-latency.md)
+- trace usage and cost — [investigations/trace-usage-and-cost.md](investigations/trace-usage-and-cost.md)
 
 ## Running it
 
@@ -50,6 +53,7 @@ Traces appear in LangSmith under the project named by `LANGSMITH_PROJECT`.
 | `indexing.py` | embeds and stores, skipping what is already there |
 | `retrieval.py` | question to nearest chunks |
 | `answerer.py` | question plus chunks to an answer |
+| `rag_query.py` | question to answer, retrieval and generation as one traced unit |
 | `main.py` | the terminal command |
 
 ## What was learned

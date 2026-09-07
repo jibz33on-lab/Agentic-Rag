@@ -10,7 +10,10 @@ DEFAULT_CHUNK_SIZE = 1000
 DEFAULT_CHUNK_OVERLAP = 200
 
 # Defaults match docker-compose.yml at the repo root.
-DEFAULT_LLM_MODEL = "deepseek/deepseek-v4-flash-0731"
+DEFAULT_ANSWERER_MODEL = "deepseek/deepseek-v4-flash-0731"
+DEFAULT_EVAL_CLUSTERS = 12
+DEFAULT_EVAL_EXAMPLES_PER_CLUSTER = 5
+DEFAULT_LANGSMITH_EVAL_PROJECT = "01-basic-rag-eval"
 DEFAULT_DATA_FOLDER = "data"
 DEFAULT_TOP_K = 4
 DEFAULT_QDRANT_URL = "http://localhost:6333"
@@ -24,8 +27,15 @@ DEFAULT_POSTGRES_DB = "agentic_rag"
 @dataclass(frozen=True)
 class Config:
     openrouter_api_key: str
+    # Optional, unlike the OpenRouter key: ingest and ask never touch OpenAI.
+    # The evaluation commands check for it when they run. See load_config.
+    openai_api_key: str | None
     embedding_model: str
-    llm_model: str
+    # The model under test. Generator and judge are the apparatus, pinned
+    # separately so that changing the answerer does not also change the ruler.
+    answerer_model: str
+    generator_model: str | None
+    judge_model: str | None
     embedding_dimensions: int
     chunk_size: int
     chunk_overlap: int
@@ -37,6 +47,9 @@ class Config:
     postgres_host: str
     postgres_port: int
     postgres_db: str
+    eval_clusters: int
+    eval_examples_per_cluster: int
+    langsmith_eval_project: str
 
     @property
     def collection_name(self) -> str:
@@ -90,8 +103,14 @@ def load_config(env: Mapping[str, str]) -> Config:
 
     return Config(
         openrouter_api_key=api_key,
+        # Deliberately not validated here. Raising would stop ingest and ask
+        # working for anyone who has not set up a second provider, and neither
+        # of them touches OpenAI. The evaluation commands check it themselves.
+        openai_api_key=env.get("OPENAI_API_KEY") or None,
         embedding_model=env.get("EMBEDDING_MODEL") or DEFAULT_EMBEDDING_MODEL,
-        llm_model=_text(env, "LLM_MODEL", DEFAULT_LLM_MODEL),
+        answerer_model=_text(env, "ANSWERER_MODEL", DEFAULT_ANSWERER_MODEL),
+        generator_model=env.get("GENERATOR_MODEL") or None,
+        judge_model=env.get("JUDGE_MODEL") or None,
         embedding_dimensions=_whole_number(
             env, "EMBEDDING_DIMENSIONS", DEFAULT_EMBEDDING_DIMENSIONS
         ),
@@ -105,4 +124,9 @@ def load_config(env: Mapping[str, str]) -> Config:
         postgres_host=_text(env, "POSTGRES_HOST", DEFAULT_POSTGRES_HOST),
         postgres_port=_whole_number(env, "POSTGRES_PORT", DEFAULT_POSTGRES_PORT),
         postgres_db=_text(env, "POSTGRES_DB", DEFAULT_POSTGRES_DB),
+        eval_clusters=_whole_number(env, "EVAL_CLUSTERS", DEFAULT_EVAL_CLUSTERS),
+        eval_examples_per_cluster=_whole_number(
+            env, "EVAL_EXAMPLES_PER_CLUSTER", DEFAULT_EVAL_EXAMPLES_PER_CLUSTER
+        ),
+        langsmith_eval_project=_text(env, "LANGSMITH_EVAL_PROJECT", DEFAULT_LANGSMITH_EVAL_PROJECT),
     )
