@@ -19,6 +19,14 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 from answerer import build_chat_model
 from config import load_config
 from document_loader import load_documents
+from evaluation.evaluators import evidence, make_judge
+from evaluation.golden_dataset import (
+    GOLDEN_EXAMPLES,
+    choose_chunks,
+    make_generator,
+    push,
+    read_chunks,
+)
 from guardrails import NoAnswerError
 from indexing import build_embeddings, index_chunks
 from rag_query import rag_query
@@ -44,6 +52,95 @@ def ingest(config):
         f", updated {counts['num_updated']}"
         f", deleted {counts['num_deleted']}"
     )
+
+
+def _openai(config):
+    """The evaluation apparatus' client, traced.
+
+    wrap_openai puts every generator and judge call in LangSmith. The judge is
+    otherwise the least inspectable part of the system — it emits a verdict and
+    nothing else — and this is the difference between "the judge said incorrect"
+    and seeing why.
+    """
+    from langsmith.wrappers import wrap_openai
+    from openai import OpenAI
+
+    if not config.openai_api_key:
+        raise SystemExit(
+            "OPENAI_API_KEY is not set. The evaluation apparatus runs on OpenAI, "
+            "deliberately a different provider from the answerer under test. "
+            "ingest and ask do not need it."
+        )
+    return wrap_openai(OpenAI(api_key=config.openai_api_key))
+
+
+def golden_set(config):
+    """Sample the corpus, write examples, push them to LangSmith.
+
+    LangSmith owns the dataset after this. Nothing is kept locally: two sources
+    of truth for a reference set is one more than can be right.
+    """
+    from langsmith import Client
+    from qdrant_client import QdrantClient
+
+    chunks = read_chunks(QdrantClient(url=config.qdrant_url), config.collection_name)
+    print(f"{len(chunks)} chunks in {config.collection_name}")
+
+    sample = choose_chunks(chunks, GOLDEN_EXAMPLES)
+    generate = make_generator(_openai(config), config.generator_model)
+
+    examples, discarded = [], 0
+    for chunk in sample:
+        example = generate(chunk)
+        if example is None:
+            discarded += 1
+            print(f"  discarded a chunk from {Path(chunk['source']).name}")
+            continue
+        examples.append(example)
+
+    print(f"{len(examples)} examples, {discarded} discarded")
+    if not examples:
+        return
+
+    dataset = push(Client(), config.langsmith_dataset, examples)
+    print(f"pushed to LangSmith dataset {dataset.name}")
+
+
+def run_evaluation(config):
+    """One experiment: the dataset, unchanged, against this configuration."""
+    from langsmith import Client
+    from langsmith.evaluation import evaluate
+
+    embeddings = build_embeddings(config)
+    model = build_chat_model(config)
+
+    def target(inputs: dict) -> dict:
+        result = rag_query(inputs["question"], config, embeddings, model)
+        return {
+            "answer": result.answer,
+            "chunk_texts": [chunk.page_content for chunk in result.chunks],
+        }
+
+    print(f"{config.langsmith_dataset} | {config.collection_name} | {config.answerer_model}")
+    results = evaluate(
+        target,
+        data=config.langsmith_dataset,
+        evaluators=[evidence, make_judge(_openai(config), config.judge_model)],
+        experiment_prefix=config.collection_name,
+        # What separates one experiment from another. Without it the comparison
+        # view shows two runs and no way to tell what changed between them.
+        metadata={
+            "chunk_size": config.chunk_size,
+            "chunk_overlap": config.chunk_overlap,
+            "top_k": config.top_k,
+            "embedding_model": config.embedding_model,
+            "answerer_model": config.answerer_model,
+            "judge_model": config.judge_model,
+        },
+        max_concurrency=1,
+        client=Client(),
+    )
+    print(f"\n{results}")
 
 
 def streaming_printer():
@@ -111,7 +208,7 @@ def ask(config):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["ingest", "ask"])
+    parser.add_argument("command", choices=["ingest", "ask", "golden-set", "evaluate"])
     args = parser.parse_args()
 
     load_dotenv(".env")  # third-party libraries read os.environ, not our config
@@ -119,6 +216,10 @@ def main():
 
     if args.command == "ingest":
         ingest(config)
+    elif args.command == "golden-set":
+        golden_set(config)
+    elif args.command == "evaluate":
+        run_evaluation(config)
     else:
         ask(config)
 

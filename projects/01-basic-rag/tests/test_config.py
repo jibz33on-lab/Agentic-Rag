@@ -112,21 +112,9 @@ def test_reads_the_generator_and_judge_models():
     assert config.judge_model == "openai/judge"
 
 
-def test_defaults_the_evaluation_sampling_settings():
+def test_names_the_langsmith_dataset_the_experiments_run_against():
+    """The dataset is the fixed reference every experiment is measured against,
+    and it lives in LangSmith rather than in this repo."""
     config = load_config(env={"OPENROUTER_API_KEY": "sk-or-test"})
 
-    assert config.eval_clusters == 12
-    assert config.eval_examples_per_cluster == 5
-
-
-def test_raises_when_eval_clusters_is_not_a_number():
-    with pytest.raises(ValueError, match="EVAL_CLUSTERS"):
-        load_config(env={"OPENROUTER_API_KEY": "sk-or-test", "EVAL_CLUSTERS": "twelve"})
-
-
-def test_keeps_evaluation_traces_out_of_the_application_project():
-    """Sixty machine-generated queries per run would bury the handful of real
-    ones. Cosmetic, not functional — system metrics read a specific run_id."""
-    config = load_config(env={"OPENROUTER_API_KEY": "sk-or-test"})
-
-    assert config.langsmith_eval_project == "01-basic-rag-eval"
+    assert config.langsmith_dataset == "01-basic-rag-golden"

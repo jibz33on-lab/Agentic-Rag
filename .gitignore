@@ -24,10 +24,6 @@ htmlcov/
 # Notebooks
 .ipynb_checkpoints/
 
-# Evaluation outputs. golden_set.json is committed — it is the fixed
-# reference. Individual runs are outputs and are not.
-projects/*/evaluation/runs/
-
 # Local vector stores / indexes / model caches
 .chroma/
 chroma/

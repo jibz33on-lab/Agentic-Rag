@@ -11,9 +11,7 @@ DEFAULT_CHUNK_OVERLAP = 200
 
 # Defaults match docker-compose.yml at the repo root.
 DEFAULT_ANSWERER_MODEL = "deepseek/deepseek-v4-flash-0731"
-DEFAULT_EVAL_CLUSTERS = 12
-DEFAULT_EVAL_EXAMPLES_PER_CLUSTER = 5
-DEFAULT_LANGSMITH_EVAL_PROJECT = "01-basic-rag-eval"
+DEFAULT_LANGSMITH_DATASET = "01-basic-rag-golden"
 DEFAULT_DATA_FOLDER = "data"
 DEFAULT_TOP_K = 4
 DEFAULT_QDRANT_URL = "http://localhost:6333"
@@ -47,9 +45,7 @@ class Config:
     postgres_host: str
     postgres_port: int
     postgres_db: str
-    eval_clusters: int
-    eval_examples_per_cluster: int
-    langsmith_eval_project: str
+    langsmith_dataset: str
 
     @property
     def collection_name(self) -> str:
@@ -124,9 +120,5 @@ def load_config(env: Mapping[str, str]) -> Config:
         postgres_host=_text(env, "POSTGRES_HOST", DEFAULT_POSTGRES_HOST),
         postgres_port=_whole_number(env, "POSTGRES_PORT", DEFAULT_POSTGRES_PORT),
         postgres_db=_text(env, "POSTGRES_DB", DEFAULT_POSTGRES_DB),
-        eval_clusters=_whole_number(env, "EVAL_CLUSTERS", DEFAULT_EVAL_CLUSTERS),
-        eval_examples_per_cluster=_whole_number(
-            env, "EVAL_EXAMPLES_PER_CLUSTER", DEFAULT_EVAL_EXAMPLES_PER_CLUSTER
-        ),
-        langsmith_eval_project=_text(env, "LANGSMITH_EVAL_PROJECT", DEFAULT_LANGSMITH_EVAL_PROJECT),
+        langsmith_dataset=_text(env, "LANGSMITH_DATASET", DEFAULT_LANGSMITH_DATASET),
     )

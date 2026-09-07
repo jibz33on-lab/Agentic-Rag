@@ -13,7 +13,6 @@ Plain RAG — no agents, no evaluation yet.
 
 - skeleton — [designs/skeleton.md](designs/skeleton.md)
 - evaluation — [designs/evaluation.md](designs/evaluation.md)
-- evaluation logic — [designs/evaluation-logic.md](designs/evaluation-logic.md)
 
 ## Investigations
 
