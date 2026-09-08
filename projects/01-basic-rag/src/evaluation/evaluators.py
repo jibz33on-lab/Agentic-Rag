@@ -43,22 +43,53 @@ def find_evidence(chunk_texts: list[str], quote: str) -> int | None:
     return None
 
 
+def evidence_ranks(chunk_texts: list[str], reference_outputs: dict) -> list[int | None]:
+    """Where each piece of required evidence turned up, in retrieved order.
+
+    One entry per quote the example needs, None where it was not retrieved.
+
+    A single-chunk example is read as a one-element list: examples written
+    before multi-chunk support carry `quote` and no `quotes`, and this keeps
+    their scores exactly as they were.
+
+    Both the evidence evaluator and the judge call this, so they cannot drift
+    into disagreeing about whether the same run had its evidence.
+    """
+    quotes = reference_outputs.get("quotes") or [reference_outputs["quote"]]
+    return [find_evidence(chunk_texts, quote) for quote in quotes]
+
+
 def evidence(outputs: dict, reference_outputs: dict) -> dict:
     """Did retrieval find the text the answer was supposed to come from?
 
     A LangSmith evaluator: the argument names are the contract, and `evaluate()`
     fills them from the target's output and the dataset example.
 
-    Two scores rather than one. `evidence_found` averages to the hit rate.
-    `evidence_rank_reciprocal` averages to MRR, which sees the difference
-    between evidence at position one and position four — an improvement a
-    boolean cannot show.
+    Three scores:
+
+    `evidence_found` is all-or-nothing. A question needing three chunks is not
+    served by two of them, so this asks whether the answerer had everything it
+    needed, not whether it had something.
+
+    `evidence_recall` is the fraction retrieved — the difference between
+    retrieval being broken and retrieval being one chunk short.
+
+    `evidence_rank_reciprocal` uses the DEEPEST required rank, because that is
+    the smallest TOP_K that would have retrieved every piece. Zero when any is
+    missing: no TOP_K would have been enough. For one quote this is exactly the
+    old 1/rank.
     """
-    rank = find_evidence(outputs["chunk_texts"], reference_outputs["quote"])
+    ranks = evidence_ranks(outputs["chunk_texts"], reference_outputs)
+    retrieved = [rank for rank in ranks if rank is not None]
+    complete = len(retrieved) == len(ranks)
     return {
         "results": [
-            {"key": "evidence_found", "score": int(rank is not None)},
-            {"key": "evidence_rank_reciprocal", "score": 1 / rank if rank else 0},
+            {"key": "evidence_found", "score": int(complete)},
+            {"key": "evidence_recall", "score": len(retrieved) / len(ranks)},
+            {
+                "key": "evidence_rank_reciprocal",
+                "score": 1 / max(retrieved) if complete else 0,
+            },
         ]
     }
 
@@ -132,7 +163,11 @@ def make_judge(client, model: str):
 
         correct = int(judgement["verdict"] == "correct")
         grounded = int(judgement["grounded"])
-        found = find_evidence(outputs["chunk_texts"], reference_outputs["quote"]) is not None
+        # The same definition evidence_found uses, via the same function —
+        # partial evidence is not evidence, and the two scores must not
+        # disagree about the same run.
+        ranks = evidence_ranks(outputs["chunk_texts"], reference_outputs)
+        found = all(rank is not None for rank in ranks)
         comment = judgement["reason"]
 
         results = [

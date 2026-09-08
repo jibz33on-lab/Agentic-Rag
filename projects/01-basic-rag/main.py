@@ -23,7 +23,9 @@ from evaluation.evaluators import evidence, make_judge
 from evaluation.golden_dataset import (
     GOLDEN_EXAMPLES,
     choose_chunks,
+    choose_related_groups,
     make_generator,
+    make_multi_generator,
     push,
     read_chunks,
 )
@@ -104,6 +106,95 @@ def golden_set(config):
 
     dataset = push(Client(), config.langsmith_dataset, examples)
     print(f"pushed to LangSmith dataset {dataset.name}")
+
+
+def golden_set_multi(config, count):
+    """Add multi-chunk examples to the dataset that already exists.
+
+    Appends rather than replaces. The single-chunk examples are still a valid
+    test — they just cannot show whether retrieval can assemble an answer from
+    more than one chunk, which is what these add.
+    """
+    from langsmith import Client
+    from qdrant_client import QdrantClient
+
+    chunks = read_chunks(QdrantClient(url=config.qdrant_url), config.collection_name)
+    groups = choose_related_groups(chunks, groups=count)
+    print(f"{len(groups)} groups of related chunks, sizes {[len(g) for g in groups]}")
+
+    generate = make_multi_generator(_openai(config), config.generator_model)
+    examples, discarded = [], 0
+    for group in groups:
+        example = generate(group)
+        if example is None:
+            discarded += 1
+            print(f"  discarded a group of {len(group)}")
+            continue
+        examples.append(example)
+
+    print(f"{len(examples)} multi-chunk examples, {discarded} discarded")
+    if not examples:
+        return
+    dataset = push(Client(), config.langsmith_dataset, examples)
+    print(f"appended to LangSmith dataset {dataset.name}")
+
+
+def benchmark(config, dataset_name, size, count, attempts, seed):
+    """Add `count` validated examples of a given chunk size to `dataset_name`.
+
+    One size per run, so a build is short, resumable, and its cost visible.
+    Size 1 reuses the single-chunk generator; 2-4 reuse the multi-chunk one,
+    including its check that no single chunk answers the question.
+
+    Questions already in the dataset are skipped, so re-running to top up a
+    size cannot introduce a duplicate.
+    """
+    from langsmith import Client
+    from qdrant_client import QdrantClient
+
+    ls = Client()
+    existing = set()
+    if ls.has_dataset(dataset_name=dataset_name):
+        existing = {
+            " ".join((e.inputs.get("question") or "").lower().split())
+            for e in ls.list_examples(dataset_name=dataset_name)
+        }
+    print(f"{dataset_name}: {len(existing)} examples already, want {count} more of size {size}")
+
+    chunks = read_chunks(QdrantClient(url=config.qdrant_url), config.collection_name)
+    client = _openai(config)
+
+    if size == 1:
+        candidates = [[c] for c in choose_chunks(chunks, attempts, seed=seed)]
+        generate = make_generator(client, config.generator_model)
+        produce = lambda group: generate(group[0])  # noqa: E731
+    else:
+        candidates = choose_related_groups(chunks, groups=attempts, seed=seed, size=size)
+        produce = make_multi_generator(client, config.generator_model)
+
+    accepted, rejected, duplicates = [], 0, 0
+    for group in candidates:
+        if len(accepted) >= count:
+            break
+        example = produce(group)
+        if example is None:
+            rejected += 1
+            continue
+        key = " ".join(example["question"].lower().split())
+        if key in existing:
+            duplicates += 1
+            continue
+        existing.add(key)
+        accepted.append(example)
+
+    print(
+        f"accepted {len(accepted)}, rejected {rejected}, duplicates {duplicates}"
+        f" (from {len(candidates)} candidates)"
+    )
+    if not accepted:
+        return
+    dataset = push(ls, dataset_name, accepted)
+    print(f"appended to {dataset.name}")
 
 
 def run_evaluation(config):
@@ -208,7 +299,19 @@ def ask(config):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["ingest", "ask", "golden-set", "evaluate"])
+    parser.add_argument("command", choices=["ingest", "ask", "golden-set", "evaluate", "benchmark"])
+    parser.add_argument("--dataset", default=None, help="benchmark: dataset name to build")
+    parser.add_argument("--size", type=int, default=1, help="benchmark: chunks per question")
+    parser.add_argument("--count", type=int, default=5, help="benchmark: examples to accept")
+    parser.add_argument("--attempts", type=int, default=30, help="benchmark: candidates to try")
+    parser.add_argument("--seed", type=int, default=0, help="benchmark: grouping seed")
+    parser.add_argument(
+        "--multi",
+        type=int,
+        default=0,
+        metavar="N",
+        help="with golden-set: add N multi-chunk examples instead of generating single-chunk ones",
+    )
     args = parser.parse_args()
 
     load_dotenv(".env")  # third-party libraries read os.environ, not our config
@@ -217,7 +320,19 @@ def main():
     if args.command == "ingest":
         ingest(config)
     elif args.command == "golden-set":
-        golden_set(config)
+        if args.multi:
+            golden_set_multi(config, args.multi)
+        else:
+            golden_set(config)
+    elif args.command == "benchmark":
+        benchmark(
+            config,
+            args.dataset or config.langsmith_dataset,
+            args.size,
+            args.count,
+            args.attempts,
+            args.seed,
+        )
     elif args.command == "evaluate":
         run_evaluation(config)
     else:
