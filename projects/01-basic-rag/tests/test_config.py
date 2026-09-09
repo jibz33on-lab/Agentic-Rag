@@ -114,7 +114,11 @@ def test_reads_the_generator_and_judge_models():
 
 def test_names_the_langsmith_dataset_the_experiments_run_against():
     """The dataset is the fixed reference every experiment is measured against,
-    and it lives in LangSmith rather than in this repo."""
+    and it lives in LangSmith rather than in this repo.
+
+    The default is the benchmark, not the superseded golden set: every question
+    in the latter was written from a single chunk, so every metric sat at 1.000
+    and no retrieval change could move it."""
     config = load_config(env={"OPENROUTER_API_KEY": "sk-or-test"})
 
-    assert config.langsmith_dataset == "01-basic-rag-golden"
+    assert config.langsmith_dataset == "01-basic-rag-benchmark"

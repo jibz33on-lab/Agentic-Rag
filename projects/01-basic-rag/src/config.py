@@ -11,7 +11,7 @@ DEFAULT_CHUNK_OVERLAP = 200
 
 # Defaults match docker-compose.yml at the repo root.
 DEFAULT_ANSWERER_MODEL = "deepseek/deepseek-v4-flash-0731"
-DEFAULT_LANGSMITH_DATASET = "01-basic-rag-golden"
+DEFAULT_LANGSMITH_DATASET = "01-basic-rag-benchmark"
 DEFAULT_DATA_FOLDER = "data"
 DEFAULT_TOP_K = 4
 DEFAULT_QDRANT_URL = "http://localhost:6333"
