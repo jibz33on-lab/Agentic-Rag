@@ -67,12 +67,19 @@ URL: `https://smith.langchain.com/o/<org>/datasets/<dataset>/compare?selectedSes
 
 ## Loose ends
 
-- **Committed defaults still name the old dataset** — `config.py:14` and
-  `.env.example:48` say `01-basic-rag-golden`. A fresh clone would evaluate
-  against the saturated set. `.env` is git-ignored, so the correct value exists
-  only on one machine. Two one-line changes.
-- **`data/` is untracked and not ignored.** 2.3 MB of third-party PDFs. Without
-  them neither dataset can be rebuilt or verified from the repo alone.
+- ~~**Committed defaults still name the old dataset.**~~ Fixed 2026-09-09.
+  `config.py:14` and `.env.example:48` now say `01-basic-rag-benchmark`, and
+  `test_config.py:120` — which the original note missed — asserts it.
+- ~~**`data/` is untracked and not ignored.**~~ Fixed 2026-09-09. The documents
+  are third-party, so they stay out of a public repo; `data/README.md` and
+  `data/corpus.sha256` describe them instead, and
+  `main.py verify-corpus` checks a folder against the manifest, exiting
+  non-zero on a changed, missing or extra file. The old `.gitignore` rule was
+  `data/raw/`, which matched nothing.
+- **The corpus sources were never written down.** The manifest can verify a
+  corpus but not rebuild one, so a fresh clone still needs the four files handed
+  to it. Closing this means finding where each came from; `data/README.md` has
+  the table waiting.
 - **Generation is not the bottleneck.** `correct_given_evidence` was 1.000 at
   `TOP_K` 1, 2 and 4 — whenever retrieval delivered every required chunk, the
   answer was right. Work retrieval, not the prompt.
@@ -117,3 +124,4 @@ URL: `https://smith.langchain.com/o/<org>/datasets/<dataset>/compare?selectedSes
 | 2026-09-02 | Switched 01 to LangChain used directly. Purpose is now comparing frameworks, so vocabulary moved to LangChain's names. |
 | 2026-09-07 | Evaluation designed and built. Probe found OpenRouter's cost is discarded by LangChain and recoverable; `flush()` does not make a trace readable. |
 | 2026-09-08 | Rebuilt around LangSmith as the evaluation workspace; deleted our runner, metrics reader and aggregation. Added multi-chunk examples and the 25-example benchmark. Ran TOP_K 1/2/4/8. |
+| 2026-09-09 | Closed the two loose ends: defaults point at the benchmark, and the corpus is described by a committed manifest that `verify-corpus` checks. |

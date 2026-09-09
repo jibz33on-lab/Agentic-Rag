@@ -1,0 +1,7 @@
+# The corpus project 01 was ingested from, and the benchmark written against.
+# Verify with:  uv run python projects/01-basic-rag/main.py verify-corpus
+# or, without this repo's code:  shasum -a 256 -c data/corpus.sha256
+3839ec1d7c675872c3b68e2286abbaad040353915da16d78a7bc131fa282c15c  agentic-systems-mental-model.docx
+c3a59a7bddef7e2d93b828b78be445946d9bb3eb3d814c823759e0437df658be  complete-langgraph-tutorial-from-beginner-to-advanced.pdf
+78f3592c43bc4daa1a6e24a7a6b3dc252326efd888337f815e963f7d980765a3  hybrid-search-fundamentals.pdf
+d198e3a681776b5fd93ff47758e613c4b4830d1f320d94a094dc658d6736ac87  system-design-fundamentals.pdf

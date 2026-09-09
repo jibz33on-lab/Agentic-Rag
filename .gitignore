@@ -31,8 +31,17 @@ chroma/
 *.sqlite3
 .lancedb/
 storage/
-data/raw/
 .cache/
+
+# The corpus: third-party documents, not ours to redistribute. What describes
+# them is committed; they are not. See data/README.md.
+# `data/*` rather than `data/`, because an ignored directory cannot have its
+# children un-ignored. The old rule here was `data/raw/`, which matched nothing
+# — the documents sit directly in data/ — so they were neither tracked nor
+# ignored, and only showed up as permanent noise in `git status`.
+data/*
+!data/README.md
+!data/corpus.sha256
 
 # Editors
 .idea/

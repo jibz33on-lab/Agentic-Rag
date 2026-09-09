@@ -1,5 +1,6 @@
 """Terminal entry point: ingest the data folder, then ask it questions.
 
+    uv run python projects/01-basic-rag/main.py verify-corpus
     uv run python projects/01-basic-rag/main.py ingest
     uv run python projects/01-basic-rag/main.py ask
 
@@ -18,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from answerer import build_chat_model
 from config import load_config
+from corpus import MANIFEST_NAME, check_corpus, is_intact, parse_manifest
 from document_loader import load_documents
 from evaluation.evaluators import evidence, make_judge
 from evaluation.golden_dataset import (
@@ -33,6 +35,33 @@ from guardrails import NoAnswerError
 from indexing import build_embeddings, index_chunks
 from rag_query import rag_query
 from text_splitter import split_documents
+
+
+def verify_corpus(config):
+    """Is the data folder the corpus the benchmark numbers were measured on?
+
+    Worth running before ingest, and before believing a comparison against an
+    older experiment. Exits non-zero when it is not, so CI can call it.
+    """
+    folder = Path(config.data_folder)
+    manifest_path = folder / MANIFEST_NAME
+    if not manifest_path.is_file():
+        raise SystemExit(f"no manifest at {manifest_path}. See {folder}/README.md")
+
+    checks = check_corpus(folder, parse_manifest(manifest_path.read_text()))
+    for check in checks:
+        print(f"  {check.status:<9} {check.name}")
+        if check.status == "changed":
+            print(f"    expected {check.expected}\n    got      {check.actual}")
+
+    if is_intact(checks):
+        print(f"{len(checks)} files, all matching {manifest_path}")
+        return
+    raise SystemExit(
+        f"\n{folder}/ is not the corpus the benchmark was built on. Chunk ids and "
+        "the dataset's verbatim quotes are tied to these exact files, so an "
+        "evaluation run now is not comparable to the recorded experiments."
+    )
 
 
 def ingest(config):
@@ -299,7 +328,10 @@ def ask(config):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["ingest", "ask", "golden-set", "evaluate", "benchmark"])
+    parser.add_argument(
+        "command",
+        choices=["ingest", "ask", "golden-set", "evaluate", "benchmark", "verify-corpus"],
+    )
     parser.add_argument("--dataset", default=None, help="benchmark: dataset name to build")
     parser.add_argument("--size", type=int, default=1, help="benchmark: chunks per question")
     parser.add_argument("--count", type=int, default=5, help="benchmark: examples to accept")
@@ -317,7 +349,9 @@ def main():
     load_dotenv(".env")  # third-party libraries read os.environ, not our config
     config = load_config(os.environ)
 
-    if args.command == "ingest":
+    if args.command == "verify-corpus":
+        verify_corpus(config)
+    elif args.command == "ingest":
         ingest(config)
     elif args.command == "golden-set":
         if args.multi:
