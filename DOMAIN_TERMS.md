@@ -12,10 +12,11 @@ If a term is ambiguous or missing, we stop and fix it here before writing more
 code.
 
 > **Review status.** The LangChain names are taken from its current documentation.
-> `chunk`, `retrieval_signals`, `answerer` and `rag_query` are ours, kept
-> deliberately. `golden_example` and `evaluation_run` were settled in the
-> evaluation design session and are no longer drafts. Still AI-proposed drafts:
-> `document`, `tool_call` and `trace`.
+> `chunk`, `candidate`, `retrieval_signals`, `answerer` and `rag_query` are ours,
+> kept deliberately. `golden_example` and `evaluation_run` were settled in the
+> evaluation design session, `reranker` and `candidate` in the reranking one, and
+> none of those four are drafts. Still AI-proposed drafts: `document`,
+> `tool_call` and `trace`.
 
 ---
 
@@ -33,6 +34,15 @@ LangChain has no word for this; a split is just another `Document`. We keep
 `chunk` because "document" meaning both the whole PDF and one paragraph of it is
 genuinely confusing in conversation. In code it will be a `Document` like any
 other.
+
+### `candidate` — *ours*
+A `chunk` the `vector_store` returned for possible use, before the `reranker`
+cuts to `TOP_K`. `CANDIDATE_COUNT` is how many are fetched.
+
+*Not:* a `chunk` the `answerer` sees. Only the surviving `TOP_K` reach the
+prompt. The distinction is the point of re-ranking: `evidence_found` is measured
+on what the `answerer` received, while the ceiling on it is set by what was a
+`candidate`.
 
 ---
 
@@ -83,6 +93,19 @@ Goes from a query to relevant `chunk`s. Usually made with
 return.
 
 *Not:* it does not interpret what it found or decide what happens next.
+
+### `reranker`
+Scores each (query, `candidate`) pair *jointly* and reorders by relevance,
+keeping the top `TOP_K`. `CrossEncoderReranker` over a local cross-encoder.
+
+*Not:* a `retriever`. It fetches nothing. It only reorders what the `retriever`
+returned, so it can never recover a `chunk` the `vector_store` did not hand it —
+which is why `CANDIDATE_COUNT` sets a hard ceiling on what re-ranking achieves.
+
+*Not:* the `embedding_model`. That encodes the query and the `chunk` separately
+and compares two vectors, which is what makes it cheap enough to run over the
+whole collection. A `reranker` reads both texts together, which is why it is
+more accurate and why it is only affordable over a handful of `candidate`s.
 
 ### `generation`
 The step that turns a query plus retrieved `chunk`s into an answer, done by a chat
