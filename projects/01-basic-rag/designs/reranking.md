@@ -94,6 +94,56 @@ The third outcome is why this runs first. **This is a gate, not a formality**:
 if the ceiling is low, the correct outcome of this design is to defer re-ranking
 and do hybrid search instead.
 
+### Result, 2026-09-09 — the gate passes
+
+Experiment `bge-m3-1000-200-c849dc0d`, session
+`fd809e8d-4022-46cb-a9ec-601b37e7de23`.
+
+| Metric | TOP_K=20 | TOP_K=4 baseline |
+|---|---|---|
+| `evidence_found` | **0.960** | 0.680 |
+| `evidence_recall` | 0.990 | 0.853 |
+| `correct` | **0.960** | 0.880 |
+| `correct_given_evidence` | 0.958 | 1.000 |
+| `grounded` | 0.960 | 1.000 |
+| `evidence_rank_reciprocal` | ≈0.50 | 0.46 |
+| prompt tokens | 104,635 | 22,592 |
+
+**The ceiling is 0.960**, the first of the three outcomes above. Twenty-four of
+25 questions have every required `chunk` inside the top 20, so re-ranking's task
+is purely to lift them into the top 4. One question is unreachable at
+`CANDIDATE_COUNT=20` — a four-`chunk` question that gets to `evidence_recall`
+0.75. Re-ranking proceeds.
+
+**Two things the design did not predict.**
+
+`correct` at 20 is 0.960 — *higher* than at 4 or 8. Twenty `chunk`s did not
+distract the `answerer`. The distraction effect is real but small: one question
+had its evidence at rank 1 and still came back wrong and ungrounded, which is
+what pulls `correct_given_evidence` and `grounded` to 0.960. Several other
+questions were fixed. So the prediction that a wide `TOP_K` degrades answers was
+too strong; it degrades a little and helps more.
+
+That sharpens the target rather than weakening it. Brute force already reaches
+0.960, at 4.6x the prompt tokens. **Re-ranking's job is to reach TOP_K=20's
+accuracy at TOP_K=4's prompt cost.**
+
+The formula predicted `correct ≈ 0.985` at `evidence_found` 0.960; the actual is
+0.960. Close, and low rather than high, because the 62.5% partial-evidence rate
+does not account for a question that had complete evidence and was still
+answered wrongly.
+
+**The success criteria above were not revised after this run.** 0.880 remains the
+bar to beat and 0.960 is recorded as the reference ceiling to be judged against.
+Moving a bar after seeing the data is how an experiment stops being one.
+
+**A note on reading LangSmith.** This run's column headers showed `1.00 AVG` for
+`correct`, `evidence_found`, `evidence_recall` and `grounded` while those columns
+visibly contained `0.00` cells — stale aggregates on a just-finished experiment.
+Every figure above was counted by hand from all 25 rows. The `TOP_K=4` run was
+re-verified the same way and its headers are accurate, including `grounded`
+1.000 with no zero in any row, so the recorded baseline stands.
+
 ## Scope
 
 **In.**
@@ -187,6 +237,12 @@ actually forces it, not pre-emptively on the strength of two.
 `config.py` gains `reranker_model` and `candidate_count`, and validates
 `CANDIDATE_COUNT > TOP_K` — below that the `reranker` has nothing to choose
 between, and that should fail at load rather than at runtime.
+
+**The rule is conditional on `RERANKER_MODEL` being set.** Enforcing it
+unconditionally would have made step 0 impossible: the ceiling run needs
+`TOP_K=20` against a default `CANDIDATE_COUNT` of 20, and `20 > 20` is false. With
+re-ranking off, `candidate_count` is unused and has no business constraining
+`TOP_K`. Found while writing the first test, and settled before it was written.
 
 ## Failure
 

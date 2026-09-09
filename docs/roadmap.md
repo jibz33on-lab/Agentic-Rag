@@ -43,11 +43,47 @@ All four against `01-basic-rag-benchmark`, changing only `TOP_K`.
 | 2 | 0.520 | 0.750 | 0.800 | 1.000 | 12,250 | $0.00193 |
 | 4 | 0.680 | 0.853 | **0.880** | 1.000 | 22,592 | $0.00291 |
 | 8 | 0.880 | 0.953 | 0.880 | 0.960 | 43,581 | $0.00460 |
+| 20 | 0.960 | 0.990 | 0.960 | 0.960 | 104,635 | — |
 
-`TOP_K` stays at **4**. Correctness peaks there and stops. `TOP_K=8` costs 58%
-more for the same answers and is the only setting where `grounded` and
-`correct_given_evidence` fell below 1.000 — extra context distracting the model
-rather than informing it.
+`TOP_K` stays at **4** for the shipped configuration. Correctness peaks there
+among 1/2/4/8, and `TOP_K=8` costs 58% more for the same answers.
+
+**The `TOP_K=20` row is a ceiling measurement, not a candidate setting.** It was
+run on 2026-09-09 as step 0 of the reranking design — see
+[`designs/reranking.md`](../projects/01-basic-rag/designs/reranking.md). A
+`reranker` can only reorder what the `vector_store` returned, so
+`evidence_found` at 20 `candidate`s is the hard ceiling on what re-ranking can
+achieve. It is **0.960**: 24 of 25 questions have every required `chunk` inside
+the top 20, and re-ranking's whole job is pulling them into the top 4. Only one
+question is out of reach at this `CANDIDATE_COUNT` — a four-`chunk` question
+that reaches `evidence_recall` 0.75.
+
+Two results there were not predicted. `correct` at 20 is **0.960**, higher than
+at 4 or 8 — twenty `chunk`s did not distract the `answerer`, they helped it. The
+distraction effect is real but small: exactly one question had its evidence at
+rank 1 and still came back wrong and ungrounded, against several that were fixed.
+So re-ranking's target is no longer "beat 0.880"; it is **reach TOP_K=20's
+accuracy at TOP_K=4's prompt cost**, which is 104,635 tokens against 22,592, a
+factor of 4.6.
+
+The success criteria in the design were fixed before this run and were
+deliberately **not** revised after seeing it. 0.880 stays the baseline to beat;
+0.960 is the reference ceiling to be judged against.
+
+`evidence_rank_reciprocal` at 20 is ≈0.50 by hand count. Cost is unrecorded: the
+LangSmith cost column is empty for OpenRouter models by design, and the earlier
+rows' figures came from `openrouter_cost` in the trace metadata, which was not
+read for this run.
+
+> **Reading these numbers from LangSmith.** The `TOP_K=20` run's column headers
+> reported `1.00 AVG` for `correct`, `evidence_found`, `evidence_recall` and
+> `grounded` while those same columns visibly contained `0.00` cells — stale
+> aggregates on a just-finished experiment. Every figure in the row above was
+> counted by hand from all 25 rows instead. The `TOP_K=4` run was re-checked the
+> same way and its headers are accurate (`correct` 0.88, `evidence_found` 0.68,
+> `evidence_recall` 0.85, and `grounded` genuinely 1.000 with no zero in any of
+> its 25 rows), so the earlier four rows are trustworthy. Check a header against
+> its rows before recording it.
 
 **Why a bigger `TOP_K` is the wrong lever.** `evidence_rank_reciprocal` moved
 only 0.32 → 0.50 across an eight-fold widening. The required chunks are not
@@ -62,6 +98,7 @@ Experiments, under organisation `418b2cd4-5deb-4a57-8883-6818ec404713`, dataset
 | 2 | `bge-m3-1000-200-9abbcad2` | `914d086d-1c9f-4281-a63e-3a15bf0d2be6` |
 | 4 | `bge-m3-1000-200-3fa1e704` | `4d2aedeb-99c6-43df-826f-9810f539ee69` |
 | 8 | `bge-m3-1000-200-8a38809d` | `9abbc6b1-100b-4e9c-8a84-d4c1d1ec527b` |
+| 20 | `bge-m3-1000-200-c849dc0d` | `fd809e8d-4022-46cb-a9ec-601b37e7de23` |
 
 URL: `https://smith.langchain.com/o/<org>/datasets/<dataset>/compare?selectedSessions=<session>`
 
@@ -125,3 +162,4 @@ URL: `https://smith.langchain.com/o/<org>/datasets/<dataset>/compare?selectedSes
 | 2026-09-07 | Evaluation designed and built. Probe found OpenRouter's cost is discarded by LangChain and recoverable; `flush()` does not make a trace readable. |
 | 2026-09-08 | Rebuilt around LangSmith as the evaluation workspace; deleted our runner, metrics reader and aggregation. Added multi-chunk examples and the 25-example benchmark. Ran TOP_K 1/2/4/8. |
 | 2026-09-09 | Closed the two loose ends: defaults point at the benchmark, and the corpus is described by a committed manifest that `verify-corpus` checks. |
+| 2026-09-09 | Designed reranking in a grill-me session. Step 0 ceiling run at `TOP_K=20`: `evidence_found` 0.960, so the gate passes and the work proceeds. |
