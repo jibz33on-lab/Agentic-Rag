@@ -144,6 +144,83 @@ Every figure above was counted by hand from all 25 rows. The `TOP_K=4` run was
 re-verified the same way and its headers are accurate, including `grounded`
 1.000 with no zero in any row, so the recorded baseline stands.
 
+## Result, 2026-09-10 — reranking does not clear the bar
+
+Two runs, both against `01-basic-rag-benchmark` at `TOP_K=4`.
+
+**The baseline gate passed first.** Experiment `bge-m3-1000-200-c098116f`,
+session `e41de0eb-df69-427c-a21c-a0d72fc577d9`, reranking off. Every retrieval
+metric reproduced the recorded baseline row for row — `evidence_found` 0.680
+with its eight misses on the same eight questions, identical `evidence_recall`
+values, and 22,592 prompt tokens to the token. The refactor is inert, so what
+follows is reranking's own effect and not the rewrite's.
+
+Two answers moved on their own (`correct` 0.880 either way, from different
+rows), and `correct_given_evidence` fell 1.000 → 0.941 on one question that had
+its evidence and was answered wrongly anyway. OpenRouter routes to whichever
+provider is serving the model, so the answerer is not reproducible between runs
+even at temperature 0. Only the retrieval metrics are.
+
+**The experiment.** `bge-m3-1000-200-487d661a`, session
+`caa4adf5-48af-4e53-886d-7b64c645af0f`, `CANDIDATE_COUNT=20`, `TOP_K=4`,
+`BAAI/bge-reranker-base`.
+
+| Metric | baseline | reranked | bar | |
+|---|---|---|---|---|
+| `evidence_found` | 0.680 | 0.720 | ≥ 0.780 | **fail** |
+| `correct` | 0.880 | 0.840 | ≥ 0.880 | **fail** |
+| `grounded` | 1.000 | 0.960 | 1.000 | **fail** |
+| `correct_given_evidence` | 0.941 | 1.000 | — | improved |
+| `evidence_recall` | 0.853 | 0.843 | — | slightly worse |
+| `evidence_rank_reciprocal` | 0.46 | 0.463 | — | unchanged |
+| prompt tokens | 22,592 | 23,772 | — | +5% |
+| latency P50 | 5.10s | 6.49s | — | +27% |
+
+All three criteria fail, so `RERANKER_MODEL` stays empty.
+
+### It is a trade, not a failure to act
+
+Reranking moved seven questions. It **gained** evidence on four that the
+`vector_store` had missed, and **lost** evidence on three it had:
+
+| | questions |
+|---|---|
+| gained (`evidence_found` 0 → 1) | 2, 8, 19, 22 |
+| lost (`evidence_found` 1 → 0) | 10, 13, 18 |
+
+Net one question in twenty-five: +0.04. `correct` fell because two questions had
+been answered correctly *without* complete evidence in the baseline, and the
+chunks the reranker swapped in no longer supported the guess.
+
+### Why this is the interesting result
+
+`evidence_rank_reciprocal` did not move: **0.46 → 0.463.**
+
+That is the same signal that ruled out a larger `TOP_K`, where it moved only
+0.32 → 0.50 across an eight-fold widening. A cross-encoder reading the question
+and the chunk together now also fails to rank the required chunks higher.
+
+Two different relevance mechanisms, one bi-encoder and one cross-encoder, with
+the same blind spot. The problem is not the quality of semantic scoring. These
+questions are not findable semantically at all — a cross-encoder is still a
+semantic model and inherits `bge-m3`'s weakness rather than correcting it.
+
+That is an argument for **hybrid search**, and a sharper one than the roadmap
+had before this run: several required quotes carry distinctive literal tokens —
+`EnsembleRetriever`, `RRF`, `429` — that BM25 matches exactly and embeddings
+blur. Reranking may well be worth revisiting *on top of* hybrid search, once the
+candidate set contains the right chunks for it to promote.
+
+### What was kept
+
+The code stays, defaulted off. The gate proved it inert with `RERANKER_MODEL`
+unset, it is covered by twelve tests, and the machinery — a wider candidate
+fetch, an optional compressor in `retrieve` — is what a hybrid-search experiment
+would build on. `CANDIDATE_COUNT` remains a live setting for the same reason.
+
+The success criteria were **not** revised after seeing these numbers. That is
+the whole reason they were written down first.
+
 ## Scope
 
 **In.**

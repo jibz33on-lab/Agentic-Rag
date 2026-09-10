@@ -5,8 +5,9 @@ intent, not commitments.
 
 ## Where we are
 
-Project 01 has evaluation, built on LangSmith. Branch
-`feat/evaluation-foundations`, four commits, 64 tests, not yet pushed or merged.
+Project 01 has evaluation, built on LangSmith, and a reranker that was measured
+and switched off. Branch `feat/evaluation-foundations`, eight commits, 84 tests,
+not yet pushed or merged.
 
 **Read first:** [`projects/01-basic-rag/designs/evaluation.md`](../projects/01-basic-rag/designs/evaluation.md)
 for the architecture and the decisions behind it, and
@@ -26,12 +27,17 @@ single-chunk plus 5/6/4 needing two, three and four chunks.
 single chunk, so retrieval found them at rank 1 every time and every metric sat
 at 1.000. A benchmark with no headroom cannot detect an improvement.
 
-**Next: reranking**, inside `retrieval.py`. Retrieve wide, rerank with a
-cross-encoder, keep the top few. It needs no new index and no ingest change, and
-`rag_query`, the evaluators and the dataset all stay as they are — so the result
-is directly comparable to the four TOP_K experiments below. Hybrid search is the
-other candidate and is the larger change, because a keyword index reaches back
-into ingest.
+**Reranking was built, measured and switched off** — see the section below and
+[`designs/reranking.md`](../projects/01-basic-rag/designs/reranking.md). The code
+stays, defaulted off via an empty `RERANKER_MODEL`.
+
+**Next: hybrid search.** BM25 alongside vectors, fused with RRF. It is the larger
+change, because a keyword index reaches back into ingest, but it is now the
+indicated one rather than merely the other candidate: two different semantic
+relevance mechanisms have failed to rank the required chunks higher, and several
+required quotes carry literal tokens that BM25 matches exactly. Reranking is
+worth revisiting on top of it, once the candidate set contains the right chunks
+to promote.
 
 ## TOP_K experiments — 2026-09-08
 
@@ -102,6 +108,44 @@ Experiments, under organisation `418b2cd4-5deb-4a57-8883-6818ec404713`, dataset
 
 URL: `https://smith.langchain.com/o/<org>/datasets/<dataset>/compare?selectedSessions=<session>`
 
+## Reranking experiment — 2026-09-10
+
+`CANDIDATE_COUNT=20` fetched, `BAAI/bge-reranker-base` scoring, best `TOP_K=4`
+passed on. Same dataset, same collection, same answerer as the TOP_K runs.
+
+| Metric | baseline | reranked | bar | |
+|---|---|---|---|---|
+| `evidence_found` | 0.680 | 0.720 | ≥ 0.780 | **fail** |
+| `correct` | 0.880 | 0.840 | ≥ 0.880 | **fail** |
+| `grounded` | 1.000 | 0.960 | 1.000 | **fail** |
+| `correct_given_evidence` | 0.941 | 1.000 | — | improved |
+| `evidence_rank_reciprocal` | 0.46 | 0.463 | — | unchanged |
+| prompt tokens | 22,592 | 23,772 | — | +5% |
+| latency P50 | 5.10s | 6.49s | — | +27% |
+
+**A trade, not an absence of effect.** Reranking gained evidence on four
+questions the `vector_store` had missed (2, 8, 19, 22) and lost it on three it
+had (10, 13, 18). Net one question in twenty-five.
+
+**`evidence_rank_reciprocal` did not move.** That is the same signal that ruled
+out a larger `TOP_K`, where it went only 0.32 → 0.50 across an eight-fold
+widening. A cross-encoder reading question and chunk together also fails to rank
+the required chunks higher — two relevance mechanisms, one blind spot. A
+cross-encoder is still semantic, so it inherits `bge-m3`'s weakness rather than
+correcting it. Hence hybrid search.
+
+The criteria were fixed before the run and were not revised after it.
+
+A **baseline gate** ran first, reranking off on the new code, and reproduced the
+recorded baseline row for row — `evidence_found` 0.680 with the same eight
+misses, and 22,592 prompt tokens exactly. That is what makes the +0.04 above
+reranking's own effect rather than the refactor's.
+
+| Run | experiment | session |
+|---|---|---|
+| gate, no reranker | `bge-m3-1000-200-c098116f` | `e41de0eb-df69-427c-a21c-a0d72fc577d9` |
+| reranked | `bge-m3-1000-200-487d661a` | `caa4adf5-48af-4e53-886d-7b64c645af0f` |
+
 ## Loose ends
 
 - ~~**Committed defaults still name the old dataset.**~~ Fixed 2026-09-09.
@@ -123,10 +167,8 @@ URL: `https://smith.langchain.com/o/<org>/datasets/<dataset>/compare?selectedSes
 
 ## Ideas backlog
 
-- **Hybrid search.** BM25 alongside vectors, fused with RRF. Several required
-  quotes carry distinctive tokens — `EnsembleRetriever`, `RRF`, `429` — that
-  keyword search finds instantly and embeddings blur. Needs a keyword index, so
-  it touches ingest.
+- ~~**Hybrid search.**~~ Promoted out of the backlog — it is the next piece of
+  work, for the reason the reranking experiment gave it.
 - **Query decomposition.** The multi-chunk questions are effectively multi-hop.
   Even at `TOP_K=8`, three-chunk questions only reach 0.667 `evidence_found`.
 - **Refusal on unanswerable questions.** Needs adversarial examples that
@@ -163,3 +205,4 @@ URL: `https://smith.langchain.com/o/<org>/datasets/<dataset>/compare?selectedSes
 | 2026-09-08 | Rebuilt around LangSmith as the evaluation workspace; deleted our runner, metrics reader and aggregation. Added multi-chunk examples and the 25-example benchmark. Ran TOP_K 1/2/4/8. |
 | 2026-09-09 | Closed the two loose ends: defaults point at the benchmark, and the corpus is described by a committed manifest that `verify-corpus` checks. |
 | 2026-09-09 | Designed reranking in a grill-me session. Step 0 ceiling run at `TOP_K=20`: `evidence_found` 0.960, so the gate passes and the work proceeds. |
+| 2026-09-10 | Built reranking, TDD, twelve tests. Baseline gate reproduced 0.680 exactly, so the refactor is inert. Reranked run: `evidence_found` 0.720 against a bar of 0.780, `correct` 0.840 against 0.880. Switched off; hybrid search is next. |
