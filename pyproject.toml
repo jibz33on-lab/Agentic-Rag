@@ -20,6 +20,16 @@ dependencies = [
     "python-dotenv>=1.2.3",
 ]
 
+[project.optional-dependencies]
+# Reranking. Deliberately an extra rather than a dependency or a dependency
+# group: CI runs `uv sync --all-groups`, which installs groups but not extras,
+# so torch stays out of every push for a component most runs never touch.
+# reranker.py imports sentence-transformers inside a function so the module,
+# and every test that fakes a reranker, works without this installed.
+rerank = [
+    "sentence-transformers>=3.0",
+]
+
 [dependency-groups]
 dev = [
     "pytest>=8.3",

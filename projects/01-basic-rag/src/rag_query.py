@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from answerer import stream_answer
 from config import Config
 from langchain_core.documents import Document
+from langchain_core.documents.compressor import BaseDocumentCompressor
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseChatModel
 from langsmith import traceable
@@ -66,6 +67,7 @@ def rag_query(
     config: Config,
     embeddings: Embeddings,
     model: BaseChatModel,
+    reranker: BaseDocumentCompressor | None,
     on_piece: Callable[[str], None] | None = None,
 ) -> RagQueryResult:
     """Retrieve, then answer — as one traced unit.
@@ -78,9 +80,15 @@ def rag_query(
     `on_piece` is called with each piece as it arrives, so a caller can print a
     streaming answer without the printing happening in here. It is optional: an
     evaluation_run has nothing to print.
+
+    `reranker` is not optional, deliberately. It is built once at startup and
+    passed down like `embeddings` and `model`, and a default of None would let a
+    caller skip reranking by forgetting an argument — producing an
+    evaluation_run labelled reranked that carries baseline numbers. Pass None to
+    mean it explicitly.
     """
     run_tree = get_current_run_tree()
-    chunks = retrieve(question, config, embeddings, config.top_k)
+    chunks = retrieve(question, config, embeddings, reranker)
 
     answer = ""
     for piece in stream_answer(question, chunks, model):

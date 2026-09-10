@@ -122,3 +122,31 @@ def test_names_the_langsmith_dataset_the_experiments_run_against():
     config = load_config(env={"OPENROUTER_API_KEY": "sk-or-test"})
 
     assert config.langsmith_dataset == "01-basic-rag-benchmark"
+
+
+def test_rejects_a_candidate_count_no_larger_than_top_k_when_reranking():
+    """A reranker fetches CANDIDATE_COUNT candidates and cuts them to TOP_K.
+    When the fetch is no wider than the cut there is nothing to choose between,
+    so reranking silently becomes a no-op — a wrong configuration, not merely
+    an unhelpful one."""
+    with pytest.raises(ValueError, match="CANDIDATE_COUNT"):
+        load_config(
+            env={
+                "OPENROUTER_API_KEY": "sk-or-test",
+                "RERANKER_MODEL": "BAAI/bge-reranker-base",
+                "CANDIDATE_COUNT": "4",
+                "TOP_K": "4",
+            }
+        )
+
+
+def test_allows_top_k_to_equal_candidate_count_when_reranking_is_off():
+    """The other half of the rule. The ceiling measurement runs TOP_K=20 with no
+    reranker, against a default CANDIDATE_COUNT of 20 — enforcing the rule then
+    would forbid the very experiment that decides whether reranking is worth
+    building."""
+    config = load_config(env={"OPENROUTER_API_KEY": "sk-or-test", "TOP_K": "20"})
+
+    assert config.reranker_model is None
+    assert config.candidate_count == 20
+    assert config.top_k == 20

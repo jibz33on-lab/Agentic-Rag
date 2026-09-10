@@ -24,7 +24,7 @@ def test_returns_the_answer_and_the_chunks_it_came_from(services, config):
     embeddings = _indexed(config)
     model = FakeListChatModel(responses=["both at once"])
 
-    result = rag_query("what is hybrid search?", config, embeddings, model)
+    result = rag_query("what is hybrid search?", config, embeddings, model, None)
 
     assert result.answer == "both at once"
     assert result.chunks[0].page_content == SOURCE.page_content
@@ -37,7 +37,7 @@ def test_streams_each_piece_to_the_caller_when_asked(services, config):
     model = FakeListChatModel(responses=["both at once"])
     seen = []
 
-    rag_query("what is hybrid search?", config, embeddings, model, on_piece=seen.append)
+    rag_query("what is hybrid search?", config, embeddings, model, None, on_piece=seen.append)
 
     assert len(seen) > 1
     assert "".join(seen) == "both at once"

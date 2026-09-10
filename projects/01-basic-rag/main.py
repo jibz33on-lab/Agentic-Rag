@@ -34,6 +34,7 @@ from evaluation.golden_dataset import (
 from guardrails import NoAnswerError
 from indexing import build_embeddings, index_chunks
 from rag_query import rag_query
+from reranker import build_reranker
 from text_splitter import split_documents
 
 
@@ -226,6 +227,17 @@ def benchmark(config, dataset_name, size, count, attempts, seed):
     print(f"appended to {dataset.name}")
 
 
+def _reranking(config) -> str:
+    """One line saying whether reranking is on, printed by ask and evaluate.
+
+    Worth the space: reranking is optional, and the difference between a
+    reranked run and a baseline one is otherwise invisible from the terminal.
+    """
+    if not config.reranker_model:
+        return "no reranker"
+    return f"reranking {config.candidate_count} -> {config.top_k} with {config.reranker_model}"
+
+
 def run_evaluation(config):
     """One experiment: the dataset, unchanged, against this configuration."""
     from langsmith import Client
@@ -233,15 +245,21 @@ def run_evaluation(config):
 
     embeddings = build_embeddings(config)
     model = build_chat_model(config)
+    # Before the first question, so a model that will not load ends the run here
+    # rather than fifteen examples in, having already spent money.
+    reranker = build_reranker(config)
 
     def target(inputs: dict) -> dict:
-        result = rag_query(inputs["question"], config, embeddings, model)
+        result = rag_query(inputs["question"], config, embeddings, model, reranker)
         return {
             "answer": result.answer,
             "chunk_texts": [chunk.page_content for chunk in result.chunks],
         }
 
-    print(f"{config.langsmith_dataset} | {config.collection_name} | {config.answerer_model}")
+    print(
+        f"{config.langsmith_dataset} | {config.collection_name} | {config.answerer_model}"
+        f" | {_reranking(config)}"
+    )
     results = evaluate(
         target,
         data=config.langsmith_dataset,
@@ -253,6 +271,12 @@ def run_evaluation(config):
             "chunk_size": config.chunk_size,
             "chunk_overlap": config.chunk_overlap,
             "top_k": config.top_k,
+            # Recorded because the reranker is optional. An experiment that
+            # silently ran without it would sit in LangSmith labelled reranked,
+            # carrying baseline numbers, with nothing to reveal the difference.
+            "reranking": reranker is not None,
+            "reranker_model": config.reranker_model,
+            "candidate_count": config.candidate_count if reranker else None,
             "embedding_model": config.embedding_model,
             "answerer_model": config.answerer_model,
             "judge_model": config.judge_model,
@@ -279,7 +303,8 @@ def ask(config):
     """Answer questions until you stop asking."""
     embeddings = build_embeddings(config)
     model = build_chat_model(config)
-    print(f"{config.collection_name} | {config.answerer_model}")
+    reranker = build_reranker(config)
+    print(f"{config.collection_name} | {config.answerer_model} | {_reranking(config)}")
     print("Ask a question, or 'quit' to stop.\n")
 
     while True:
@@ -298,7 +323,7 @@ def ask(config):
 
         print()
         try:
-            result = rag_query(question, config, embeddings, model, show)
+            result = rag_query(question, config, embeddings, model, reranker, show)
         except NoAnswerError as error:
             print(f"\n  {error}\n")
             continue
