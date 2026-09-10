@@ -14,6 +14,7 @@ Plain RAG — no agents, no evaluation yet.
 - skeleton — [designs/skeleton.md](designs/skeleton.md)
 - evaluation — [designs/evaluation.md](designs/evaluation.md)
 - reranking — [designs/reranking.md](designs/reranking.md)
+- hybrid search — [designs/hybrid-search.md](designs/hybrid-search.md)
 
 ## Investigations
 
