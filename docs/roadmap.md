@@ -157,6 +157,14 @@ reranking's own effect rather than the refactor's.
   `main.py verify-corpus` checks a folder against the manifest, exiting
   non-zero on a changed, missing or extra file. The old `.gitignore` rule was
   `data/raw/`, which matched nothing.
+- **`evaluate` prints no scores.** `main.py:246` does `print(f"\n{results}")`, and
+  the LangSmith SDK's `ExperimentResults` renders as `<ExperimentResults ...>` —
+  the run finishes and the terminal says nothing about how it went. Every number
+  in this file was therefore read off the LangSmith UI, whose column headers gave
+  wrong aggregates on three separate occasions, each time on a just-finished run
+  (see the note under the TOP_K table). Printing the feedback aggregates locally
+  would remove that whole class of misreading. A small fix worth more than it
+  costs.
 - **The corpus sources were never written down.** The manifest can verify a
   corpus but not rebuild one, so a fresh clone still needs the four files handed
   to it. Closing this means finding where each came from; `data/README.md` has
