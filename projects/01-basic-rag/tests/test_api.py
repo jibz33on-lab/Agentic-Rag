@@ -21,7 +21,7 @@ def _fake_answer_question(question: str) -> RagQueryResult:
     return RagQueryResult(
         answer=FAKE_ANSWER,
         chunks=[
-            Document(page_content="first chunk", metadata={"source": "a.pdf", "page": 1}),
+            Document(page_content="first chunk", metadata={"source": "a.pdf", "page": 0}),
             # A docx carries no page. Docx2txtLoader does not produce one, and
             # the corpus has one, so this is the real shape rather than an edge
             # case invented for the test.
@@ -72,6 +72,7 @@ def test_returns_the_retrieved_chunks_in_the_documented_shape():
     response = client.post("/query", json={"question": "What is a candidate?"})
 
     assert response.json()["chunks"] == [
+        # metadata page 0 is the first page of the PDF, exposed as page 1.
         {"text": "first chunk", "source": "a.pdf", "page": 1},
         {"text": "second chunk", "source": "b.docx", "page": None},
     ]
@@ -332,3 +333,38 @@ def test_the_production_callable_forwards_every_dependency_to_rag_query():
         "reranker": "RERANKER",
     }
     assert result.answer == FAKE_ANSWER
+
+
+def test_exposes_pdf_pages_as_human_page_numbers():
+    """PyPDFLoader counts from zero; a person reading a PDF counts from one.
+
+    `as_evidence` passed the raw number straight through, so a live response
+    returned `"page": 20` for a chunk whose own text reads `Page 21`. A UI built
+    on that sends the reader one page early — wrong in the way nobody checks,
+    because the number looks perfectly plausible.
+
+    Fixed here rather than in the client. A 0-based index is an implementation
+    detail of the loader, and translating internals into the contract is the
+    only reason this layer exists. Fixing it in the frontend would mean every
+    future client has to know, and would silently be wrong until it did.
+
+    None survives untouched. A docx has no pages, and `None + 1` would crash the
+    whole query over a source that simply has none.
+    """
+
+    def pages_from_two_sources(question: str) -> RagQueryResult:
+        return RagQueryResult(
+            answer=FAKE_ANSWER,
+            chunks=[
+                Document(page_content="front", metadata={"source": "a.pdf", "page": 0}),
+                Document(page_content="later", metadata={"source": "a.pdf", "page": 19}),
+                Document(page_content="no pages", metadata={"source": "b.docx"}),
+            ],
+            run_id=FAKE_RUN_ID,
+        )
+
+    client = TestClient(create_app(pages_from_two_sources))
+
+    response = client.post("/query", json={"question": "a question"})
+
+    assert [chunk["page"] for chunk in response.json()["chunks"]] == [1, 20, None]

@@ -230,13 +230,13 @@ works; only pytest tells CI.
   synchronous, and FastAPI runs a plain `def` route in a thread pool. An
   `async def` route calling it would block the event loop for the whole of every
   question — one slow user, everybody waits.
-- **`page` is 0-indexed and the contract does not say so.** `PyPDFLoader` puts a
-  0-based page number in `metadata`, and `as_evidence` passes it through. A live
-  response returned `"page": 20` for a chunk whose own text reads `Page 21`. A
-  UI sending a reader one page early is wrong in the way nobody checks. Fix it
-  in `as_evidence` so every client is right by default, keeping `None` intact for
-  a source with no pages — or leave the API faithful to the loader and make every
-  client know. Needs a test either way.
+- ~~**`page` is 0-indexed and the contract does not say so.**~~ Fixed.
+  `as_evidence` adds one, so the contract promises the page a person would turn
+  to rather than `PyPDFLoader`'s index. Found in a live response, which returned
+  `"page": 20` for a chunk whose own text reads `Page 21`. Fixed here rather than
+  in the client because a 0-based index is the loader's detail, and every future
+  client would otherwise have to know — and be silently wrong until it did.
+  `None` survives untouched for a source with no pages.
 - **`source` carries the ingest path.** A live response returned
   `data/hybrid-search-fundamentals.pdf`. Same question as `page`: translate here,
   or let clients strip it.

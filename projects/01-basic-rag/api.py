@@ -48,12 +48,24 @@ def as_evidence(chunk: Document) -> dict:
     `page` is None rather than absent for a source that has no pages — a docx
     carries none, and the corpus has one. The client then reads the same three
     fields for every chunk instead of testing for a missing key.
+
+    And it is the page a person would turn to, not the loader's index.
+    PyPDFLoader counts from zero, so passing the number through returned
+    `"page": 20` for a chunk whose own text reads `Page 21` — a UI built on that
+    sends the reader one page early, wrong in the way nobody checks because the
+    number looks plausible. A 0-based index is the loader's detail, and
+    translating details into the contract is the only reason this function
+    exists.
+
+    None survives the arithmetic. `None + 1` would fail the whole query over a
+    source that simply has no pages.
     """
     metadata = chunk.metadata or {}
+    page = metadata.get("page")
     return {
         "text": chunk.page_content,
         "source": metadata.get("source"),
-        "page": metadata.get("page"),
+        "page": None if page is None else page + 1,
     }
 
 
