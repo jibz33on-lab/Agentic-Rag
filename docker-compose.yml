@@ -46,6 +46,51 @@ services:
       - postgres
     restart: unless-stopped
 
+  # Project 01's HTTP API. See projects/01-basic-rag/designs/containerisation.md
+  #
+  #   docker compose up -d --build api     build and start
+  #   docker compose logs -f api           watch it
+  #   docker compose down                  stop everything
+  #
+  # It answers from whatever is already in Qdrant. It does not ingest: the
+  # corpus lives on the host and `main.py ingest` is still a host command.
+  api:
+    build:
+      # The repo root, because pyproject.toml and uv.lock live there and nothing
+      # inside the project folder can reach up to them. The Dockerfile sits
+      # beside the code it builds; the two are set separately on purpose.
+      context: .
+      dockerfile: projects/01-basic-rag/Dockerfile
+    container_name: agentic-rag-api
+    ports:
+      # host:container. The left 8000 is the port on your Mac; the right one is
+      # the port uvicorn listens on inside. Change the left one if 8000 is taken.
+      - "8000:8000"
+    # The whole .env, unchanged and still correct for host-side commands.
+    # Deliberately the whole file rather than a hand-written list: almost every
+    # setting in config.py has a default, and EMBEDDING_MODEL, CHUNK_SIZE and
+    # CHUNK_OVERLAP build collection_name — so a list that falls one variable
+    # behind would not crash, it would answer 200 from a different, empty
+    # collection.
+    env_file: .env
+    environment:
+      # The one variable whose correct value differs inside a container.
+      # localhost:6333 is right on your Mac and wrong in here, because a
+      # container's localhost is itself. `qdrant` is the service name below, and
+      # Docker resolves it on the network Compose puts these services on.
+      # `environment:` wins over `env_file:`, which is what makes this an
+      # override rather than a conflict.
+      QDRANT_URL: http://qdrant:6333
+    # No `restart:`, unlike the services above. They are infrastructure that
+    # should stay up; this is the thing under change. A crashed container that
+    # stays crashed holds a readable traceback, where a restart loop scrolls it
+    # away. The AWS step will want the opposite.
+    #
+    # No `depends_on:` either. Nothing connects to Qdrant at import — retrieval
+    # opens the vector_store per request — so the API starts fine without it,
+    # and plain depends_on waits for a container to start rather than to be
+    # ready, which would not have helped anyway.
+
 volumes:
   qdrant-data:
   postgres-data:

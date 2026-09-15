@@ -1,0 +1,59 @@
+# What must not enter the build context.
+#
+# The build context is everything Docker can see while building. Two reasons to
+# keep it small: nothing outside it can be copied in by accident, and the whole
+# context is sent to the Docker daemon before the build starts, so a 30 MB
+# corpus is 30 MB of waiting on every build.
+#
+# The Dockerfile copies named files rather than `COPY . .`, so most of this is a
+# second line of defence. The first two entries are the ones that matter.
+
+# Secrets. Never in an image: a file copied into a layer stays in that layer
+# even if a later instruction deletes it, so the key would travel with every
+# copy of the image. Keys are a run-time input, supplied by Compose.
+.env
+.env.*
+!.env.example
+
+# A virtualenv built for macOS, holding macOS binaries. Inside a Linux image it
+# is both broken and large. The image builds its own with `uv sync`.
+.venv
+
+# The corpus: third-party documents, deliberately untracked, and only ever read
+# by `ingest` — which does not run in this image.
+data/
+
+# History and tooling state. Nothing here is needed to run the API.
+.git
+.github
+.gitignore
+.ruff_cache
+.pytest_cache
+.mypy_cache
+.coverage
+htmlcov/
+**/__pycache__
+**/*.pyc
+
+# Editor and OS noise.
+.DS_Store
+.idea
+.vscode
+
+# Written work. Read by people, not by the server.
+docs/
+**/designs/
+**/investigations/
+**/README.md
+!README.md
+
+# Tests and their fixtures. pytest is not installed in the image (--no-dev), and
+# the image is not how the suite is run.
+**/tests/
+**/conftest.py
+
+# Docker's own files.
+Dockerfile
+**/Dockerfile
+.dockerignore
+docker-compose.yml
