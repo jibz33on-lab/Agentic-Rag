@@ -16,6 +16,7 @@ Plain RAG — no agents, no evaluation yet.
 - reranking — [designs/reranking.md](designs/reranking.md)
 - hybrid search — [designs/hybrid-search.md](designs/hybrid-search.md)
 - the HTTP API — [designs/api.md](designs/api.md)
+- the container — [designs/containerisation.md](designs/containerisation.md)
 
 ## Investigations
 

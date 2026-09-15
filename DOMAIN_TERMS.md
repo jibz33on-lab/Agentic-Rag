@@ -16,7 +16,8 @@ code.
 > kept deliberately. `golden_example` and `evaluation_run` were settled in the
 > evaluation design session, `reranker` and `candidate` in the reranking one, and
 > none of those four are drafts. Still AI-proposed drafts: `document`,
-> `tool_call` and `trace`.
+> `tool_call`, `trace`, and the four Docker terms under **Shipping it** —
+> proposed 2026-09-15 in the containerisation session and not yet read back.
 
 ---
 
@@ -193,7 +194,56 @@ comparable numbers. The unit of "did this change help" — meaningless unless th
 
 ---
 
+## Shipping it
+
+**We use Docker's names wherever Docker supplies the thing**, for the same
+reason we use LangChain's: they are the words the docs, the job adverts and
+every other engineer use. None of these is ours.
+
+### `image`
+The built, frozen artifact: a filesystem plus a default command. Built once from
+the `Dockerfile`, and unchanging afterwards.
+
+*Not:* a running thing. An `image` runs no code and holds no state. Ours
+contains project 01's API and nothing else — no `main.py`, no corpus, no
+reranker dependencies.
+
+### `container`
+One running instance of an `image`. Several can run from the same one.
+
+*Not:* a virtual machine. It is isolated processes on the host kernel, which is
+why the user it runs as is a real decision rather than a formality.
+
+### `build context`
+The folder handed to `docker build`. Nothing outside it can be copied into the
+`image`, which is why ours is the repo root: `pyproject.toml` and `uv.lock` live
+there, and `projects/01-basic-rag/` cannot reach up to them.
+
+*Not:* the folder the `Dockerfile` sits in. Those are set separately.
+
+### `layer`
+One frozen slice of filesystem, produced by one `Dockerfile` instruction and
+cached. Two consequences we rely on: a file copied into a `layer` stays in the
+`image` even if a later instruction deletes it — which is why `.env` must never
+be copied — and an unchanged instruction reuses its cached `layer`, which is why
+dependencies are installed before the source is copied.
+
+---
+
 ## Ambiguous words
+
+### `service`
+Means two things, and both appear in this repo:
+
+1. **A Compose service** — one entry under `services:` in `docker-compose.yml`.
+   `qdrant`, `postgres`, `pgadmin` and now `api` are each one. This is our
+   default meaning, because it is the one written down in a file.
+2. **The thing the API is** — as `designs/api.md` uses it, meaning the
+   long-running process that answers `rag_query` over HTTP.
+
+They coincide for `api` and diverge everywhere else: Qdrant is a Compose service
+and not ours to call a service in the second sense. Say "the `api` service" when
+you mean the Compose entry.
 
 ### `index`
 Means three different things:
