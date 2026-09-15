@@ -165,6 +165,11 @@ reranking's own effect rather than the refactor's.
   (see the note under the TOP_K table). Printing the feedback aggregates locally
   would remove that whole class of misreading. A small fix worth more than it
   costs.
+- **Qdrant holds ~300 stray collections.** Names like `4c11638c4776-1000-200`,
+  left behind by test fixtures that create a collection and never drop it.
+  Harmless — `bge-m3-1000-200` is unaffected — but it makes the collection
+  list unreadable, which is exactly where you look when a container answers
+  200 from the wrong place. Found while verifying the container.
 - **The corpus sources were never written down.** The manifest can verify a
   corpus but not rebuild one, so a fresh clone still needs the four files handed
   to it. Closing this means finding where each came from; `data/README.md` has
@@ -214,3 +219,5 @@ reranking's own effect rather than the refactor's.
 | 2026-09-09 | Closed the two loose ends: defaults point at the benchmark, and the corpus is described by a committed manifest that `verify-corpus` checks. |
 | 2026-09-09 | Designed reranking in a grill-me session. Step 0 ceiling run at `TOP_K=20`: `evidence_found` 0.960, so the gate passes and the work proceeds. |
 | 2026-09-10 | Built reranking, TDD, twelve tests. Baseline gate reproduced 0.680 exactly, so the refactor is inert. Reranked run: `evidence_found` 0.720 against a bar of 0.780, `correct` 0.840 against 0.880. Switched off; hybrid search is next. |
+| 2026-09-14 | HTTP API designed and built: `POST /query`, everything expensive constructed once in `asgi.py`, one error shape with a `request_id`. `src/` unchanged. |
+| 2026-09-15 | Containerised the API in a `grill-me` session. Single-stage image from `uv.lock`, non-root, API only — no `main.py`, no corpus, no reranker. Added as the `api` Compose service, reaching Qdrant by name. Verified manually: five checks, and host and container retrieve the same four chunks for the same question. |
