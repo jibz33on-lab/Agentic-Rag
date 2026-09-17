@@ -66,3 +66,123 @@ jobs:
 
       - name: Who am I?
         run: aws sts get-caller-identity
+
+  # Build the image, push it, and roll it out. Runs only after `check` passes
+  # and only on main, because the OIDC role's trust policy accepts no other
+  # branch and a red test suite must never reach ECS.
+  deploy:
+    needs: check
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # A native ARM64 runner, free on public repositories. Fargate runs this
+    # image on ARM64, so building on ubuntu-latest would mean emulating the
+    # whole build under QEMU. Do not move this back to ubuntu-latest without
+    # restoring the QEMU setup step, or the image will be amd64 and every
+    # task will die at launch with `exec format error`.
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      id-token: write
+      contents: read
+    # One deploy at a time. ECS would accept two overlapping UpdateService
+    # calls and the later-finishing one wins, which is not necessarily the
+    # newer commit. Queue rather than cancel: a half-finished push to ECR is
+    # worse than a slow queue.
+    concurrency:
+      group: deploy-basic-rag-api
+      cancel-in-progress: false
+    env:
+      AWS_REGION: us-east-1
+      ECR_REPOSITORY: basic-rag-api
+      ECS_CLUSTER: basic-rag-cluster
+      ECS_SERVICE: basic-rag-api-service
+      ECS_TASK_FAMILY: basic-rag-api
+      CONTAINER_NAME: api
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assume the deploy role via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::222043263320:role/github-actions-basic-rag-deploy
+          role-session-name: github-actions-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log Docker in to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # The commit SHA, never `latest`: the tag a task definition points at
+      # must mean exactly one set of bytes, forever, or a rollback cannot say
+      # what it is rolling back to.
+      - name: Build for linux/arm64 and push to ECR
+        uses: docker/build-push-action@v6
+        with:
+          # The repo root, matching docker-compose.yml: pyproject.toml and
+          # uv.lock live there and the Dockerfile cannot reach up to them.
+          context: .
+          file: projects/01-basic-rag/Dockerfile
+          platforms: linux/arm64
+          push: true
+          # A plain single-platform manifest rather than an image index with
+          # an extra `unknown/unknown` attestation entry.
+          provenance: false
+          tags: ${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Read the live configuration rather than keeping a copy in the repo, so
+      # the revision this registers differs from the running one in the image
+      # and nothing else. The deleted fields are ones describe returns and
+      # register rejects.
+      - name: Read the current task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition "$ECS_TASK_FAMILY" \
+            --query taskDefinition \
+            --output json \
+            | jq 'del(
+                .taskDefinitionArn,
+                .revision,
+                .status,
+                .requiresAttributes,
+                .compatibilities,
+                .registeredAt,
+                .registeredBy,
+                .deregisteredAt
+              )' > task-definition.json
+          echo "Preserved: $(jq -r '[.cpu, .memory, .runtimePlatform.cpuArchitecture, .networkMode] | join(" / ")' task-definition.json)"
+
+      - name: Swap in the new image
+        id: render
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition.json
+          container-name: ${{ env.CONTAINER_NAME }}
+          image: ${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+
+      - name: Register the revision and update the service
+        id: deploy
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          # Fail the job if the rollout never reaches steady state, so a red
+          # run means a broken deploy rather than a started one.
+          wait-for-service-stability: true
+
+      - name: Report what was deployed
+        run: |
+          {
+            echo "### Deployed"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Image tag | \`${{ github.sha }}\` |"
+            echo "| ECR image | \`${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}\` |"
+            echo "| Task definition | \`${{ steps.deploy.outputs.task-definition-arn }}\` |"
+            echo "| Service | \`${{ env.ECS_SERVICE }}\` on \`${{ env.ECS_CLUSTER }}\` |"
+            echo "| Result | stable |"
+          } >> "$GITHUB_STEP_SUMMARY"
