@@ -38,3 +38,31 @@ jobs:
             exit 0
           fi
           exit "$status"
+
+  # Proves GitHub can authenticate to AWS with no stored credentials: the job
+  # asks GitHub for a signed OIDC token, hands it to STS, and gets back keys
+  # that expire in an hour. Nothing is built, pushed or deployed.
+  #
+  # Push-to-main only, because the role's trust policy pins the token's `sub`
+  # to `repo:jibz33on-lab/Agentic-Rag:ref:refs/heads/main`. A pull request
+  # token carries `...:pull_request` instead and is refused by design, so
+  # running this on PRs would fail a correctly configured role.
+  aws-oidc-check:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # Declaring `permissions` replaces the defaults rather than adding to
+    # them, so `contents: read` has to be spelled out alongside id-token even
+    # though nothing here reads the repository yet.
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Assume the deploy role via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::222043263320:role/github-actions-basic-rag-deploy
+          role-session-name: github-actions-oidc-check
+          aws-region: us-east-1
+
+      - name: Who am I?
+        run: aws sts get-caller-identity
