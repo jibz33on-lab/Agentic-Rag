@@ -368,3 +368,26 @@ def test_exposes_pdf_pages_as_human_page_numbers():
     response = client.post("/query", json={"question": "a question"})
 
     assert [chunk["page"] for chunk in response.json()["chunks"]] == [1, 20, None]
+
+
+def test_health_reports_ok_without_touching_the_pipeline():
+    """GET /health answers 200 while the pipeline stays untouched.
+
+    The load balancer polls this every few seconds and kills the task when it
+    stops answering. So it deliberately reports that the process is alive, not
+    that it can answer questions: a check that called Qdrant would turn one
+    slow dependency into every instance being replaced at once.
+
+    `_fail_if_called` is what proves that. A health route wired to the pipeline
+    would pass an assertion on the status code alone.
+    """
+
+    def _fail_if_called(question: str) -> RagQueryResult:
+        raise AssertionError("/health must not reach the pipeline")
+
+    client = TestClient(create_app(_fail_if_called))
+
+    response = client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}

@@ -203,6 +203,19 @@ def create_app(answer_question: Callable[[str], RagQueryResult]) -> FastAPI:
             request,
         )
 
+    # No dependency on answer_question, unlike /query. The load balancer polls
+    # this every few seconds to decide whether this instance should keep
+    # receiving traffic, so it answers from the process itself: it reports that
+    # the server is up, not that Qdrant and OpenRouter are reachable.
+    #
+    # That split is deliberate. A check that called the pipeline would report a
+    # slow Qdrant as every instance being unhealthy, and the load balancer would
+    # replace all of them at once over a dependency that replacing them cannot
+    # fix.
+    @app.get("/health")
+    def health() -> dict:
+        return {"status": "ok"}
+
     # `def`, not `async def`. rag_query is synchronous, and FastAPI runs a plain
     # `def` route in a thread pool — so slow calls do not block anything else.
     # An `async def` route calling the same blocking function would freeze the
