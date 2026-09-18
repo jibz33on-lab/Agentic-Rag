@@ -1,0 +1,56 @@
+# The image for project 01's AWS ingestion task.
+#
+# Built from the repo root, like the API image and for the same reason:
+#
+#   docker build -f projects/01-basic-rag/Dockerfile.ingest -t basic-rag-ingest .
+#
+# A separate file rather than a build arg on the API's Dockerfile. The two
+# images have opposite jobs — one runs forever and serves HTTP, one runs once
+# and exits — and the API image is deliberately minimal in a way that
+# `designs/containerisation.md` argues for at length. Merging them would mean
+# every API deploy carries main.py and the ingestion dependencies for no reason.
+#
+# What this image does NOT contain, and why it matters:
+#   - No Postgres client is used. `rebuild.py` imports nothing from
+#     `indexing.py`, so SQLRecordManager is never reached. That is the whole
+#     point of Option A in designs/environments.md, and it is a property you can
+#     check by reading the imports rather than by tracing a call graph.
+#   - No corpus. The documents come from S3 at run time, verified against
+#     corpus.sha256 before anything is embedded.
+
+
+FROM python:3.12-slim
+
+COPY --from=ghcr.io/astral-sh/uv:0.9.15 /uv /uvx /bin/
+
+ENV \
+    UV_LINK_MODE=copy \
+    UV_COMPILE_BYTECODE=1 \
+    UV_PYTHON_DOWNLOADS=never \
+    PYTHONUNBUFFERED=1 \
+    PATH="/app/.venv/bin:$PATH"
+
+WORKDIR /app
+
+# Dependencies before source, so editing main.py does not reinstall LangChain.
+# --no-dev leaves out pytest and ruff; the rerank extra stays out, as it does
+# in the API image, because nothing here reranks.
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev
+
+# main.py as well as the pipeline, unlike the API image. `rebuild` is a terminal
+# command, so the entry point is the CLI rather than a server.
+COPY projects/01-basic-rag/main.py ./projects/01-basic-rag/
+COPY projects/01-basic-rag/src/ ./projects/01-basic-rag/src/
+
+# Drop root. This process reads S3, calls OpenRouter and writes to Qdrant; it
+# needs none of root's privileges. It writes only to a temporary directory,
+# which tempfile puts under /tmp where any user may write.
+RUN useradd --create-home --uid 1000 app
+USER app
+
+# No CMD arguments baked in. The bucket, prefix and target collection are
+# passed by the ECS task override, so one image can rebuild a staging
+# collection or a live one without being rebuilt — and so the command recorded
+# in the task's event history says exactly what that run touched.
+ENTRYPOINT ["python", "projects/01-basic-rag/main.py", "rebuild"]

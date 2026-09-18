@@ -9,24 +9,7 @@ from langchain_community.indexes._sql_record_manager import SQLRecordManager
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_core.indexing import index
-from langchain_openai import OpenAIEmbeddings
 from vector_store import open_vector_store
-
-OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-
-
-def build_embeddings(config: Config) -> OpenAIEmbeddings:
-    """The real embedding model, served by OpenRouter.
-
-    check_embedding_ctx_length is off because the client would otherwise try
-    to count tokens with a tokeniser it only has for OpenAI's own models.
-    """
-    return OpenAIEmbeddings(
-        model=config.embedding_model,
-        api_key=config.openrouter_api_key,
-        base_url=OPENROUTER_BASE_URL,
-        check_embedding_ctx_length=False,
-    )
 
 
 def index_chunks(chunks: list[Document], config: Config, embeddings: Embeddings) -> dict[str, int]:

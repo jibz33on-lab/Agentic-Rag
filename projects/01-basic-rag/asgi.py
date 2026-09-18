@@ -38,7 +38,7 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 from answerer import build_chat_model
 from api import build_answer_question, create_app
 from config import load_config
-from indexing import build_embeddings
+from embeddings import build_embeddings
 from reranker import build_reranker
 
 load_dotenv(".env")  # third-party libraries read os.environ, not our config

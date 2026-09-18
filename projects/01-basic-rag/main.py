@@ -21,6 +21,7 @@ from answerer import build_chat_model
 from config import load_config
 from corpus import MANIFEST_NAME, check_corpus, is_intact, parse_manifest
 from document_loader import load_documents
+from embeddings import build_embeddings
 from evaluation.evaluators import evidence, make_judge
 from evaluation.golden_dataset import (
     GOLDEN_EXAMPLES,
@@ -32,7 +33,7 @@ from evaluation.golden_dataset import (
     read_chunks,
 )
 from guardrails import NoAnswerError
-from indexing import build_embeddings, index_chunks
+from indexing import index_chunks
 from rag_query import rag_query
 from reranker import build_reranker
 from text_splitter import split_documents
@@ -84,6 +85,39 @@ def ingest(config):
         f", updated {counts['num_updated']}"
         f", deleted {counts['num_deleted']}"
     )
+
+
+def rebuild(config, bucket, prefix, collection_name):
+    """Fetch the corpus from S3 and rebuild a Qdrant collection from scratch.
+
+    The AWS ingestion path. Unlike `ingest` it keeps no indexing state, so it
+    needs no Postgres — see `designs/environments.md`. Everything it touches is
+    named on the command line, so a run says in one line which bucket it read
+    and which collection it wrote.
+    """
+    import tempfile
+
+    import boto3
+    from corpus_source import fetch_corpus
+    from rebuild import rebuild_collection
+
+    target = collection_name or config.collection_name
+    print(f"rebuilding {target} from s3://{bucket}/{prefix}")
+
+    with tempfile.TemporaryDirectory() as workspace:
+        folder = fetch_corpus(boto3.client("s3"), bucket, prefix, Path(workspace) / "corpus")
+        print("  corpus verified against its manifest")
+
+        result = load_documents(folder)
+        for failure in result.failures:
+            print(f"  skipped {failure.path.name}: {failure.reason}")
+
+        chunks = split_documents(result.documents, config.chunk_size, config.chunk_overlap)
+        print(f"  {len(result.documents)} documents -> {len(chunks)} chunks")
+
+        written = rebuild_collection(chunks, config, build_embeddings(config), target)
+
+    print(f"  wrote {written} chunks to {target}")
 
 
 def _openai(config):
@@ -355,7 +389,22 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "command",
-        choices=["ingest", "ask", "golden-set", "evaluate", "benchmark", "verify-corpus"],
+        choices=[
+            "ingest",
+            "rebuild",
+            "ask",
+            "golden-set",
+            "evaluate",
+            "benchmark",
+            "verify-corpus",
+        ],
+    )
+    parser.add_argument("--bucket", default=None, help="rebuild: S3 bucket holding the corpus")
+    parser.add_argument("--prefix", default="corpus/", help="rebuild: key prefix within the bucket")
+    parser.add_argument(
+        "--collection",
+        default=None,
+        help="rebuild: collection to write, defaulting to the one derived from the settings",
     )
     parser.add_argument("--dataset", default=None, help="benchmark: dataset name to build")
     parser.add_argument("--size", type=int, default=1, help="benchmark: chunks per question")
@@ -378,6 +427,10 @@ def main():
         verify_corpus(config)
     elif args.command == "ingest":
         ingest(config)
+    elif args.command == "rebuild":
+        if not args.bucket:
+            raise SystemExit("rebuild needs --bucket, the S3 bucket holding the corpus")
+        rebuild(config, args.bucket, args.prefix, args.collection)
     elif args.command == "golden-set":
         if args.multi:
             golden_set_multi(config, args.multi)

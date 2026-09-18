@@ -27,6 +27,34 @@ def config():
 
 
 @pytest.fixture
+def qdrant_only(config):
+    """Skip unless Qdrant is up, and drop the collection afterwards.
+
+    Separate from `services` because the rebuild path deliberately needs no
+    record manager, so requiring Postgres would hide a regression: a rebuild
+    that quietly grew a Postgres dependency would still find one running here.
+
+    Unlike `services`, this cleans up. The fixtures that do not are why Qdrant
+    holds several hundred stray collections — see the roadmap's loose ends.
+    """
+    import urllib.request
+
+    try:
+        urllib.request.urlopen(config.qdrant_url, timeout=2)
+    except Exception:
+        pytest.skip("Qdrant is not running")
+
+    yield
+
+    from qdrant_client import QdrantClient
+
+    client = QdrantClient(url=config.qdrant_url)
+    for name in (config.collection_name, f"{config.collection_name}-staging"):
+        if client.collection_exists(name):
+            client.delete_collection(name)
+
+
+@pytest.fixture
 def services(config):
     """Skip unless Qdrant and Postgres are actually up."""
     import urllib.request

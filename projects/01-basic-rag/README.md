@@ -17,6 +17,8 @@ Plain RAG — no agents, no evaluation yet.
 - hybrid search — [designs/hybrid-search.md](designs/hybrid-search.md)
 - the HTTP API — [designs/api.md](designs/api.md)
 - the container — [designs/containerisation.md](designs/containerisation.md)
+- environments — [designs/environments.md](designs/environments.md)
+- AWS ingestion — [designs/ingestion.md](designs/ingestion.md)
 
 ## Investigations
 
