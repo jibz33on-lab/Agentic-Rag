@@ -49,3 +49,12 @@ data/*
 
 # macOS
 .DS_Store
+
+# Terraform. State can contain resource metadata and, for some resource types,
+# secrets -- it never belongs in a public repo. .terraform/ is a download cache.
+# .terraform.lock.hcl is deliberately NOT ignored: it pins provider checksums
+# and is the thing that makes an apply reproducible.
+infra/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
