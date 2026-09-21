@@ -503,18 +503,69 @@ a scheduled debt with a date attached, not a permanent quirk.
 
 From the audit, split by whether they block anything.
 
+### Closed
+
+- **Container health check — done.** Task definition `basic-rag-api:5` declares
+  a `healthCheck` on the `api` container, and `healthStatus` reads `HEALTHY`
+  where it read `UNKNOWN`. The probe:
+
+  ```
+  CMD  /app/.venv/bin/python  -c
+      import urllib.request,sys; sys.exit(0 if urllib.request.urlopen(
+          "http://localhost:8000/health", timeout=2).status==200 else 1)
+  ```
+
+  with `interval 30`, `timeout 5`, `retries 3`, `startPeriod 30`. Four things
+  about it are deliberate.
+
+  **Python, not `curl`.** The image is `python:3.12-slim` and contains neither
+  `curl` nor `wget` — the two commands every health-check example uses. Adding
+  one would put a package in the image solely to ask the image a question it can
+  already answer. The probe uses the interpreter that is already there, by
+  absolute path so it does not depend on `PATH`.
+
+  **`CMD`, not `CMD-SHELL`.** `CMD` execs the argument vector directly. The
+  probe carries both single and double quotes, and putting a shell in the middle
+  means escaping that correctly in the task definition, in `jq`, and in whatever
+  edits it next. `CMD` removes the shell, and the escaping with it.
+
+  **In the task definition, not the `Dockerfile`.** This is the part that is
+  easy to get wrong. The ECS agent reads *only* health checks declared in the
+  container definition; it explicitly ignores a `HEALTHCHECK` baked into an
+  image. A `HEALTHCHECK` line in our `Dockerfile` would work under
+  `docker compose` and do nothing at all on Fargate.
+
+  **No ALB.** The probe runs inside the task against `localhost`, so it never
+  crosses the ENI and `basic-rag-api-sg` is never consulted — which is why this
+  works today even though that group still admits only a laptop IP that has
+  since changed. An unhealthy essential container in a *service* is stopped and
+  replaced by the ECS scheduler itself; no load balancer is in that path. An ALB
+  answers "which target gets this request", which has no meaning at
+  `desiredCount: 1`. It stays with HTTPS and PROD, where it belongs.
+
+  What this buys: the deployment circuit breaker — already enabled, already set
+  to roll back — can now see a task that starts cleanly and then fails to serve.
+  `ci.yml` needed no change, because it reads the live task definition and edits
+  only the `image` field, so the block is carried into every future revision;
+  but its `wait-for-service-stability` gate is now a smoke test rather than a
+  liveness check.
+
+  What this does **not** buy: this is liveness, not readiness. `/health` answers
+  from the process and never touches Qdrant or OpenRouter, by design and by
+  test — a dependency check would mark every instance unhealthy over one slow
+  Qdrant and replace them all over something replacement cannot fix. A task
+  whose Qdrant is unreachable still reports `HEALTHY`. Closing *that* gap means
+  a separate `/ready` and an alarm, not a change to this probe.
+
+  Verified 2026-09-21: `healthStatus` `UNKNOWN` → `HEALTHY`; CloudWatch shows
+  `GET /health 200 OK` from `127.0.0.1` every 30s; and a throwaway standalone
+  task pointed at a non-existent path was reported `UNHEALTHY` within ~30s.
+
 ### Before DEV can be called reliable
 
 These are the ones worth doing next, and none of them needs a second
 environment.
 
-- **No container health check.** The task definition declares no `healthCheck`,
-  there is no target group, and `healthStatus` reads `UNKNOWN`. The deployment
-  circuit breaker can therefore only catch a task that fails to *start* — a task
-  that starts cleanly and cannot reach Qdrant is reported as a successful
-  deploy. `/health` exists in the application and nothing calls it. **This is
-  the most valuable single fix in this list**, because it converts the project's
-  signature silent failure into a loud one.
 - **No reproducible ingestion.** The strategy is decided — Option A, full
   rebuild, no `record_manager` — but nothing is built, and the source documents
   are still only on one machine. The blocker for everything downstream.
