@@ -14,15 +14,15 @@ resource "aws_security_group" "api" {
   description = "Created in ECS ConsoleSecurity group for Basic RAG API ECS service"
   vpc_id      = data.aws_vpc.default.id
 
-  # The only way in from outside today, and it is already broken: the laptop
-  # address it names has since changed. The ALB in step 4 is what replaces it.
-  ingress {
-    description = "temporary: direct access from my laptop (no ALB yet)"
-    from_port   = 8000
-    to_port     = 8000
-    protocol    = "tcp"
-    cidr_blocks = ["103.104.46.6/32"]
-  }
+  # There is deliberately no CIDR-based ingress here any more. Until step 4 this
+  # group admitted port 8000 from a single laptop address, described in AWS as
+  # "temporary: direct access from my laptop (no ALB yet)". The ALB is the thing
+  # that rule was waiting for, so it went with this change. It had also been
+  # broken for days -- the address it named had already been reassigned.
+  #
+  # The consequence is intended: with alb_enabled = false this group has NO
+  # ingress at all, and the task is unreachable from anywhere. Reaching the API
+  # now means going through the load balancer, which is the point of having one.
 
   # Added by step 4. Sourced from the ALB's security group, never a CIDR: ALB
   # nodes hold private IPs that change as it scales, so an address-based rule
