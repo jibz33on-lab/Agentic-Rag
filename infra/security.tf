@@ -28,16 +28,31 @@ resource "aws_security_group" "api" {
   # nodes hold private IPs that change as it scales, so an address-based rule
   # would be wrong within days. This one rule carries both real traffic and the
   # target group's health probes.
-  dynamic "ingress" {
-    for_each = var.alb_enabled ? [1] : []
-    content {
-      description     = "8000 from the ALB"
-      from_port       = 8000
-      to_port         = 8000
-      protocol        = "tcp"
-      security_groups = [aws_security_group.alb[0].id]
-    }
-  }
+  #
+  # Written as an ATTRIBUTE assignment rather than a `dynamic "ingress"` block,
+  # and that distinction is not cosmetic -- it cost a failed teardown to find.
+  #
+  # A dynamic block that produces zero blocks is indistinguishable, to the AWS
+  # provider, from not configuring ingress at all. So with alb_enabled = false
+  # the provider left the existing rule in place and reported no change, the
+  # rule went on referencing the ALB's security group, and deleting that group
+  # failed for fifteen minutes with:
+  #
+  #     DependencyViolation: resource sg-... has a dependent object
+  #
+  # An empty LIST assigned to the attribute is unambiguous: zero rules, remove
+  # what is there. The rule is now genuinely conditional in both directions.
+  ingress = var.alb_enabled ? [{
+    description      = "8000 from the ALB"
+    from_port        = 8000
+    to_port          = 8000
+    protocol         = "tcp"
+    security_groups  = [aws_security_group.alb[0].id]
+    cidr_blocks      = []
+    ipv6_cidr_blocks = []
+    prefix_list_ids  = []
+    self             = false
+  }] : []
 
   # Outbound to anywhere: the task pulls from ECR, reads SSM and calls
   # OpenRouter. These are public subnets with no NAT gateway, so this is also

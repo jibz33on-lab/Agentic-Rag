@@ -28,7 +28,10 @@
 # private IPs that change as it scales, so no CIDR would stay correct.
 # ---------------------------------------------------------------------------
 resource "aws_security_group" "alb" {
-  count = var.alb_enabled ? 1 : 0
+  # Retained a little longer than the rest of the ALB during teardown, so the
+  # ingress rule pointing at it can be revoked before it is deleted. See
+  # var.keep_alb_sg.
+  count = (var.alb_enabled || var.keep_alb_sg) ? 1 : 0
 
   name        = "basic-rag-alb-sg"
   description = "Public entry point for the basic-rag API. HTTP only; HTTPS is step 15."
