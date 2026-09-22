@@ -48,3 +48,34 @@ variable "keep_alb_sg" {
   type        = bool
   default     = false
 }
+
+variable "cloudfront_enabled" {
+  description = <<-EOT
+    Whether the CloudFront distribution and the bucket policy that trusts it
+    exist.
+
+    False, and not by preference. On 2026-09-22 CreateDistribution was refused:
+
+        AccessDenied: Your account must be verified before you can add new
+        CloudFront resources. To verify your account, please contact AWS
+        Support.
+
+    That is an account-level restriction on new accounts, not IAM and not this
+    configuration -- the plan was correct and every other resource in it
+    applied. Only AWS Support can lift it.
+
+    The flag exists so the refusal does not poison unrelated work: without it
+    every apply re-attempts the distribution, fails, and exits non-zero, which
+    would make the ALB teardown below impossible to run cleanly.
+
+    Set it to true once support confirms the account is verified:
+
+      terraform apply -var="alb_enabled=true" -var="cloudfront_enabled=true"
+
+    The bucket and its uploaded build are deliberately NOT behind this flag.
+    They cost fractions of a cent, they are what the distribution will serve,
+    and re-uploading them is pointless work.
+  EOT
+  type        = bool
+  default     = false
+}
