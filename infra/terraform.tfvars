@@ -1,15 +1,18 @@
-# The ALB stays up.
+# Both halves of the public URL are off while the account waits on AWS.
 #
-# variables.tf defaults alb_enabled to false and argues for ephemeral
-# infrastructure: ~$16.20/month forever is a poor trade for a project that is
-# usually not being looked at. That argument holds for an ALB serving a laptop.
+# CloudFront is off because AWS refuses to create it: the account is not yet
+# verified for CloudFront resources, and only AWS Support can change that. See
+# var.cloudfront_enabled.
 #
-# It does not hold once CloudFront is in front of it. A distribution needs a
-# stable public origin, and the ALB is it -- so the application having a public
-# HTTPS URL at all depends on this being true. The default is left alone
-# because the reasoning behind it is still correct in the case it describes;
-# this file records the deliberate exception.
+# The ALB is off because CloudFront is. An ALB is ~$16.20/month and exists here
+# only to be a CDN origin -- with no distribution to serve traffic, an ALB is a
+# bill with nothing on the other end. variables.tf already argues for ephemeral
+# infrastructure; this is exactly the case it describes.
 #
-# Tearing the whole thing down is still one flag:
-#   terraform apply -var="alb_enabled=false"
-alb_enabled = true
+# To finish the deployment once support confirms verification:
+#
+#   terraform apply -var="alb_enabled=true" -var="cloudfront_enabled=true"
+#
+# and then set both to true here so the setting persists.
+alb_enabled        = false
+cloudfront_enabled = false

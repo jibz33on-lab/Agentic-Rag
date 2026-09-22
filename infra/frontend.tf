@@ -85,6 +85,8 @@ resource "aws_cloudfront_origin_access_control" "frontend" {
 # The bucket trusts one distribution, named by ARN. Without the SourceArn
 # condition any CloudFront distribution in any account could read the bucket.
 data "aws_iam_policy_document" "frontend" {
+  count = var.cloudfront_enabled ? 1 : 0
+
   statement {
     sid       = "AllowCloudFrontRead"
     effect    = "Allow"
@@ -99,14 +101,16 @@ data "aws_iam_policy_document" "frontend" {
     condition {
       test     = "StringEquals"
       variable = "AWS:SourceArn"
-      values   = [aws_cloudfront_distribution.main.arn]
+      values   = [aws_cloudfront_distribution.main[0].arn]
     }
   }
 }
 
 resource "aws_s3_bucket_policy" "frontend" {
+  count = var.cloudfront_enabled ? 1 : 0
+
   bucket = aws_s3_bucket.frontend.id
-  policy = data.aws_iam_policy_document.frontend.json
+  policy = data.aws_iam_policy_document.frontend[0].json
 }
 
 # ---------------------------------------------------------------------------
@@ -136,6 +140,8 @@ data "aws_cloudfront_origin_request_policy" "all_viewer_except_host" {
 # the ALB, which is what makes them same-origin as the page.
 # ---------------------------------------------------------------------------
 resource "aws_cloudfront_distribution" "main" {
+  count = var.cloudfront_enabled ? 1 : 0
+
   enabled             = true
   comment             = "basic-rag: frontend from S3, API from the ALB"
   default_root_object = "index.html"

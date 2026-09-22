@@ -33,11 +33,11 @@ output "frontend_bucket" {
 }
 
 output "cloudfront_distribution_id" {
-  description = "Needed to invalidate the cache after deploying a new build."
-  value       = aws_cloudfront_distribution.main.id
+  description = "Needed to invalidate the cache after deploying a new build. Null while cloudfront_enabled is false."
+  value       = var.cloudfront_enabled ? aws_cloudfront_distribution.main[0].id : null
 }
 
 output "public_url" {
-  description = "The application. HTTPS, on CloudFront's own certificate."
-  value       = "https://${aws_cloudfront_distribution.main.domain_name}"
+  description = "The application. HTTPS, on CloudFront's own certificate. Null until the account is verified for CloudFront."
+  value       = var.cloudfront_enabled ? "https://${aws_cloudfront_distribution.main[0].domain_name}" : null
 }
