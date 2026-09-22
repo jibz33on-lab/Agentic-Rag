@@ -26,3 +26,18 @@ output "alb_url" {
   description = "Ready to curl. HTTP only until step 15."
   value       = var.alb_enabled ? "http://${aws_lb.main[0].dns_name}" : null
 }
+
+output "frontend_bucket" {
+  description = "The bucket holding the built frontend. Deploy with `aws s3 sync`."
+  value       = aws_s3_bucket.frontend.bucket
+}
+
+output "cloudfront_distribution_id" {
+  description = "Needed to invalidate the cache after deploying a new build."
+  value       = aws_cloudfront_distribution.main.id
+}
+
+output "public_url" {
+  description = "The application. HTTPS, on CloudFront's own certificate."
+  value       = "https://${aws_cloudfront_distribution.main.domain_name}"
+}
