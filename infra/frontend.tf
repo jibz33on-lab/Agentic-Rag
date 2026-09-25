@@ -247,8 +247,18 @@ resource "aws_cloudfront_distribution" "main" {
 
   # The certificate for *.cloudfront.net, supplied by AWS at no cost. A custom
   # domain would replace this with an ACM certificate in us-east-1.
+  #
+  # No minimum_protocol_version here, deliberately. CloudFront ignores it while
+  # cloudfront_default_certificate is true and reports TLSv1 back whatever is
+  # asked for -- the field is only honoured alongside a custom ACM certificate
+  # and SNI. Setting it produced a diff that could never converge: every plan
+  # wanted TLSv1.2_2021, every apply stored TLSv1, and the unresolvable change
+  # on this resource also left the bucket policy's document deferred, so two
+  # resources showed drift over one ignored argument.
+  #
+  # Raising the floor above TLSv1 on the viewer side therefore needs a custom
+  # domain, which this project does not have.
   viewer_certificate {
     cloudfront_default_certificate = true
-    minimum_protocol_version       = "TLSv1.2_2021"
   }
 }
