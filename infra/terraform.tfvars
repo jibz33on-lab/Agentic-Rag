@@ -1,18 +1,20 @@
-# Both halves of the public URL are off while the account waits on AWS.
+# The public deployment is live.
 #
-# CloudFront is off because AWS refuses to create it: the account is not yet
-# verified for CloudFront resources, and only AWS Support can change that. See
-# var.cloudfront_enabled.
+# CloudFront serves the frontend from S3 and routes /query and /health to the
+# ALB, so the browser sees one origin and api.py needs no CORS middleware.
+# AWS removed the account-level CloudFront hold on 2026-09-25 (support case
+# 179007379100349); before that, cloudfront_enabled had to be false because
+# CreateDistribution was refused outright. See var.cloudfront_enabled.
 #
-# The ALB is off because CloudFront is. An ALB is ~$16.20/month and exists here
-# only to be a CDN origin -- with no distribution to serve traffic, an ALB is a
-# bill with nothing on the other end. variables.tf already argues for ephemeral
-# infrastructure; this is exactly the case it describes.
+# The ALB stays up because a distribution needs a stable public origin. That is
+# the deliberate exception to the ephemeral-ALB argument in variables.tf, which
+# still holds for the case it describes: an ALB serving only a laptop.
 #
-# To finish the deployment once support confirms verification:
+# Cost: the ALB is ~$16.20/month. CloudFront has no hourly charge and this
+# traffic sits inside the free tier; the bucket holds ~415 KB.
 #
-#   terraform apply -var="alb_enabled=true" -var="cloudfront_enabled=true"
-#
-# and then set both to true here so the setting persists.
-alb_enabled        = false
-cloudfront_enabled = false
+# To tear the public surface down again:
+#   terraform apply -var="alb_enabled=false" -var="cloudfront_enabled=false"
+# The ALB teardown is two applies -- see var.keep_alb_sg.
+alb_enabled        = true
+cloudfront_enabled = true
