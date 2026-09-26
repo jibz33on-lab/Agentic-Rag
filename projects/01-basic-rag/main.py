@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from answerer import BASELINE_PROMPT, build_chat_model
+from answerer import build_chat_model, resolve_prompt
 from config import load_config
 from corpus import MANIFEST_NAME, check_corpus, is_intact, parse_manifest
 from document_loader import load_documents
@@ -280,11 +280,14 @@ def run_evaluation(config):
     embeddings = build_embeddings(config)
     model = build_chat_model(config)
     # Before the first question, so a model that will not load ends the run here
-    # rather than fifteen examples in, having already spent money.
+    # rather than fifteen examples in, having already spent money. The prompt is
+    # resolved here for the same reason: a name that does not exist should cost
+    # nothing.
     reranker = build_reranker(config)
+    prompt = resolve_prompt(config.answerer_prompt)
 
     def target(inputs: dict) -> dict:
-        result = rag_query(inputs["question"], config, embeddings, model, reranker, BASELINE_PROMPT)
+        result = rag_query(inputs["question"], config, embeddings, model, reranker, prompt)
         return {
             "answer": result.answer,
             "chunk_texts": [chunk.page_content for chunk in result.chunks],
@@ -313,6 +316,11 @@ def run_evaluation(config):
             "candidate_count": config.candidate_count if reranker else None,
             "embedding_model": config.embedding_model,
             "answerer_model": config.answerer_model,
+            # Which prompt produced these numbers. Without it two prompt
+            # experiments are identical in metadata and separable only by
+            # timestamp. Taken from the same value that was resolved and run,
+            # so the label cannot disagree with what the answerer received.
+            "answerer_prompt": config.answerer_prompt,
             "judge_model": config.judge_model,
         },
         max_concurrency=1,
@@ -338,6 +346,7 @@ def ask(config):
     embeddings = build_embeddings(config)
     model = build_chat_model(config)
     reranker = build_reranker(config)
+    prompt = resolve_prompt(config.answerer_prompt)
     print(f"{config.collection_name} | {config.answerer_model} | {_reranking(config)}")
     print("Ask a question, or 'quit' to stop.\n")
 
@@ -357,7 +366,7 @@ def ask(config):
 
         print()
         try:
-            result = rag_query(question, config, embeddings, model, reranker, BASELINE_PROMPT, show)
+            result = rag_query(question, config, embeddings, model, reranker, prompt, show)
         except NoAnswerError as error:
             print(f"\n  {error}\n")
             continue

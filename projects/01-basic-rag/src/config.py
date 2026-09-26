@@ -12,6 +12,9 @@ DEFAULT_CHUNK_OVERLAP = 200
 # Defaults match docker-compose.yml at the repo root.
 DEFAULT_ANSWERER_MODEL = "deepseek/deepseek-v4-flash-0731"
 DEFAULT_LANGSMITH_DATASET = "01-basic-rag-benchmark"
+# The answerer prompt every recorded experiment was run with. Named rather
+# than spelled out: the text lives with the answerer, this only selects it.
+DEFAULT_ANSWERER_PROMPT = "baseline"
 DEFAULT_DATA_FOLDER = "data"
 DEFAULT_TOP_K = 4
 # How many candidates the reranker scores before cutting to TOP_K. Unused when
@@ -35,6 +38,10 @@ class Config:
     # The model under test. Generator and judge are the apparatus, pinned
     # separately so that changing the answerer does not also change the ruler.
     answerer_model: str
+    # Which of the answerer's prompts to run, by name. Not validated here:
+    # config.py cannot import the registry without a cycle, so answerer.py
+    # checks the name at startup and lists the ones that exist.
+    answerer_prompt: str
     generator_model: str | None
     judge_model: str | None
     embedding_dimensions: int
@@ -129,6 +136,7 @@ def load_config(env: Mapping[str, str]) -> Config:
         openai_api_key=env.get("OPENAI_API_KEY") or None,
         embedding_model=env.get("EMBEDDING_MODEL") or DEFAULT_EMBEDDING_MODEL,
         answerer_model=_text(env, "ANSWERER_MODEL", DEFAULT_ANSWERER_MODEL),
+        answerer_prompt=_text(env, "ANSWERER_PROMPT", DEFAULT_ANSWERER_PROMPT),
         generator_model=env.get("GENERATOR_MODEL") or None,
         judge_model=env.get("JUDGE_MODEL") or None,
         embedding_dimensions=_whole_number(

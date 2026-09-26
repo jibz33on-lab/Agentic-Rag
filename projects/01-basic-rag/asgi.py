@@ -35,7 +35,7 @@ from dotenv import load_dotenv
 # package beside it.
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from answerer import BASELINE_PROMPT, build_chat_model
+from answerer import build_chat_model, resolve_prompt
 from api import build_answer_question, create_app
 from config import load_config
 from embeddings import build_embeddings
@@ -50,6 +50,6 @@ app = create_app(
         build_embeddings(_config),
         build_chat_model(_config),
         build_reranker(_config),
-        BASELINE_PROMPT,
+        resolve_prompt(_config.answerer_prompt),
     )
 )
