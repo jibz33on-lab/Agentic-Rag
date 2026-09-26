@@ -19,6 +19,7 @@ Plain RAG — no agents, no evaluation yet.
 - the container — [designs/containerisation.md](designs/containerisation.md)
 - environments — [designs/environments.md](designs/environments.md)
 - AWS ingestion — [designs/ingestion.md](designs/ingestion.md)
+- the answerer prompt — [designs/answerer-prompt.md](designs/answerer-prompt.md)
 
 ## Investigations
 
