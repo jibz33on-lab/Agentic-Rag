@@ -68,6 +68,7 @@ def rag_query(
     embeddings: Embeddings,
     model: BaseChatModel,
     reranker: BaseDocumentCompressor | None,
+    prompt: str,
     on_piece: Callable[[str], None] | None = None,
 ) -> RagQueryResult:
     """Retrieve, then answer — as one traced unit.
@@ -91,7 +92,7 @@ def rag_query(
     chunks = retrieve(question, config, embeddings, reranker)
 
     answer = ""
-    for piece in stream_answer(question, chunks, model):
+    for piece in stream_answer(question, chunks, model, prompt):
         if on_piece is not None:
             on_piece(piece)
         answer += piece

@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from answerer import build_chat_model
+from answerer import BASELINE_PROMPT, build_chat_model
 from config import load_config
 from corpus import MANIFEST_NAME, check_corpus, is_intact, parse_manifest
 from document_loader import load_documents
@@ -284,7 +284,7 @@ def run_evaluation(config):
     reranker = build_reranker(config)
 
     def target(inputs: dict) -> dict:
-        result = rag_query(inputs["question"], config, embeddings, model, reranker)
+        result = rag_query(inputs["question"], config, embeddings, model, reranker, BASELINE_PROMPT)
         return {
             "answer": result.answer,
             "chunk_texts": [chunk.page_content for chunk in result.chunks],
@@ -357,7 +357,7 @@ def ask(config):
 
         print()
         try:
-            result = rag_query(question, config, embeddings, model, reranker, show)
+            result = rag_query(question, config, embeddings, model, reranker, BASELINE_PROMPT, show)
         except NoAnswerError as error:
             print(f"\n  {error}\n")
             continue
