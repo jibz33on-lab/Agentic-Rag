@@ -35,10 +35,11 @@ from dotenv import load_dotenv
 # package beside it.
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from answerer import build_chat_model, resolve_prompt
+from answerer import build_chat_model
 from api import build_answer_question, create_app
 from config import load_config
 from embeddings import build_embeddings
+from prompts import resolve_prompt
 from reranker import build_reranker
 
 load_dotenv(".env")  # third-party libraries read os.environ, not our config
