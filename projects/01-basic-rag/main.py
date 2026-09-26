@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from answerer import build_chat_model, resolve_prompt
+from answerer import build_chat_model
 from config import load_config
 from corpus import MANIFEST_NAME, check_corpus, is_intact, parse_manifest
 from document_loader import load_documents
@@ -34,6 +34,7 @@ from evaluation.golden_dataset import (
 )
 from guardrails import NoAnswerError
 from indexing import index_chunks
+from prompts import resolve_prompt
 from rag_query import rag_query
 from reranker import build_reranker
 from text_splitter import split_documents

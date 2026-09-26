@@ -1,15 +1,10 @@
 import pytest
-from answerer import (
-    BASELINE_PROMPT,
-    build_chat_model,
-    build_prompt,
-    resolve_prompt,
-    stream_answer,
-)
+from answerer import build_chat_model, build_prompt, stream_answer
 from langchain_core.documents import Document
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 from langchain_core.messages import AIMessage
 from openai import APIError
+from prompts import BASELINE_PROMPT
 
 
 class CapturingModel:
@@ -21,22 +16,6 @@ class CapturingModel:
     def stream(self, prompt):
         self.streamed = prompt
         yield AIMessage(content="an answer")
-
-
-def test_resolves_baseline_to_the_frozen_answerer_prompt():
-    prompt = resolve_prompt("baseline")
-
-    assert "Answer the question using only the excerpts below." in prompt
-    assert "{excerpts}" in prompt
-    assert "{question}" in prompt
-
-
-def test_rejects_an_unknown_answerer_prompt_name():
-    with pytest.raises(ValueError) as error:
-        resolve_prompt("not-a-prompt")
-
-    assert "not-a-prompt" in str(error.value)
-    assert "baseline" in str(error.value)
 
 
 def test_renders_with_the_prompt_it_is_given_not_the_baseline():

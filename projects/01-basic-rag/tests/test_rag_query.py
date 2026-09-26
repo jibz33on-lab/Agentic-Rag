@@ -1,9 +1,9 @@
-from answerer import BASELINE_PROMPT
 from conftest import FAKE_DIMENSIONS
 from indexing import index_chunks
 from langchain_core.documents import Document
 from langchain_core.embeddings import DeterministicFakeEmbedding
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
+from prompts import BASELINE_PROMPT
 from rag_query import rag_query, record_cost
 
 SOURCE = Document(
