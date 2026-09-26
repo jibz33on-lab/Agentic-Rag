@@ -1,8 +1,24 @@
 import pytest
-from answerer import build_chat_model, build_prompt, stream_answer
+from answerer import build_chat_model, build_prompt, resolve_prompt, stream_answer
 from langchain_core.documents import Document
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 from openai import APIError
+
+
+def test_resolves_baseline_to_the_frozen_answerer_prompt():
+    prompt = resolve_prompt("baseline")
+
+    assert "Answer the question using only the excerpts below." in prompt
+    assert "{excerpts}" in prompt
+    assert "{question}" in prompt
+
+
+def test_rejects_an_unknown_answerer_prompt_name():
+    with pytest.raises(ValueError) as error:
+        resolve_prompt("not-a-prompt")
+
+    assert "not-a-prompt" in str(error.value)
+    assert "baseline" in str(error.value)
 
 
 def test_prompt_includes_the_question_and_the_chunks():
