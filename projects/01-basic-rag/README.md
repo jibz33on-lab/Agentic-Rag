@@ -20,6 +20,7 @@ Plain RAG — no agents, no evaluation yet.
 - environments — [designs/environments.md](designs/environments.md)
 - AWS ingestion — [designs/ingestion.md](designs/ingestion.md)
 - the answerer prompt — [designs/answerer-prompt.md](designs/answerer-prompt.md)
+- the v1 answerer prompt — [designs/answerer-prompt-v1.md](designs/answerer-prompt-v1.md)
 
 ## Investigations
 
