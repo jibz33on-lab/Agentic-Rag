@@ -1,8 +1,26 @@
 import pytest
-from answerer import build_chat_model, build_prompt, resolve_prompt, stream_answer
+from answerer import (
+    BASELINE_PROMPT,
+    build_chat_model,
+    build_prompt,
+    resolve_prompt,
+    stream_answer,
+)
 from langchain_core.documents import Document
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
+from langchain_core.messages import AIMessage
 from openai import APIError
+
+
+class CapturingModel:
+    """Records the prompt it was asked to stream."""
+
+    def __init__(self):
+        self.streamed = None
+
+    def stream(self, prompt):
+        self.streamed = prompt
+        yield AIMessage(content="an answer")
 
 
 def test_resolves_baseline_to_the_frozen_answerer_prompt():
@@ -21,10 +39,29 @@ def test_rejects_an_unknown_answerer_prompt_name():
     assert "baseline" in str(error.value)
 
 
+def test_renders_with_the_prompt_it_is_given_not_the_baseline():
+    chunks = [Document(page_content="anything")]
+
+    prompt = build_prompt("what is it?", chunks, "ONLY-THIS {excerpts} {question}")
+
+    assert "ONLY-THIS" in prompt
+    assert "Answer the question using only the excerpts below." not in prompt
+
+
+def test_streams_the_prompt_it_is_given_not_the_baseline():
+    model = CapturingModel()
+    chunks = [Document(page_content="anything")]
+
+    list(stream_answer("what is it?", chunks, model, "MARKER {excerpts} {question}"))
+
+    assert "MARKER" in model.streamed
+    assert "Answer the question using only the excerpts below." not in model.streamed
+
+
 def test_prompt_includes_the_question_and_the_chunks():
     chunks = [Document(page_content="hybrid search runs both searches in parallel")]
 
-    prompt = build_prompt("what is hybrid search?", chunks)
+    prompt = build_prompt("what is hybrid search?", chunks, BASELINE_PROMPT)
 
     assert "hybrid search runs both searches in parallel" in prompt
     assert "what is hybrid search?" in prompt
@@ -34,7 +71,7 @@ def test_streams_the_answer_in_pieces():
     model = FakeListChatModel(responses=["hybrid search runs both"])
     chunks = [Document(page_content="anything")]
 
-    pieces = list(stream_answer("what is it?", chunks, model))
+    pieces = list(stream_answer("what is it?", chunks, model, BASELINE_PROMPT))
 
     assert len(pieces) > 1
     assert "".join(pieces) == "hybrid search runs both"

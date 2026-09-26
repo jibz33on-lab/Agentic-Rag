@@ -99,12 +99,13 @@ def build_answer_question(
     embeddings,
     model,
     reranker,
+    prompt,
     query: Callable[..., RagQueryResult] = rag_query,
 ) -> Callable[[str], RagQueryResult]:
     """Make the one-argument callable the app depends on.
 
     The app wants `answer_question(question) -> RagQueryResult` and nothing
-    else. rag_query needs five arguments. This closes over the four that are
+    else. rag_query needs six arguments. This closes over the five that are
     built once at startup, so the route never learns that embeddings or a vector
     store exist.
 
@@ -118,7 +119,7 @@ def build_answer_question(
     """
 
     def answer_question(question: str) -> RagQueryResult:
-        return query(question, config, embeddings, model, reranker)
+        return query(question, config, embeddings, model, reranker, prompt)
 
     return answer_question
 

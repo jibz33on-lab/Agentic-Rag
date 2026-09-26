@@ -119,21 +119,27 @@ def build_chat_model(config: Config) -> CostCapturingChatOpenAI:
     )
 
 
-def build_prompt(question: str, chunks: list[Document]) -> str:
+def build_prompt(question: str, chunks: list[Document], prompt: str) -> str:
     """Lay the question and the retrieved chunks out for the model.
 
     Each excerpt is labelled with where it came from, so the model can point at
     its source and you can check the answer against the document yourself.
+
+    `prompt` is the template to render, chosen by the caller. It has no default:
+    one would let a caller fall back to the baseline by forgetting an argument,
+    and an evaluation_run would then be labelled with a prompt it did not run.
     """
     excerpts = "\n\n".join(
         f"[{i}] from {chunk.metadata.get('source', 'unknown')}"
         f" page {chunk.metadata.get('page', '-')}\n{chunk.page_content}"
         for i, chunk in enumerate(chunks, 1)
     )
-    return BASELINE_PROMPT.format(excerpts=excerpts, question=question)
+    return prompt.format(excerpts=excerpts, question=question)
 
 
-def stream_answer(question: str, chunks: list[Document], model: BaseChatModel) -> Iterator[str]:
+def stream_answer(
+    question: str, chunks: list[Document], model: BaseChatModel, prompt: str
+) -> Iterator[str]:
     """Yield the answer in pieces as the model produces them.
 
     Streaming does not make the answer arrive sooner, but it makes it start
@@ -141,16 +147,18 @@ def stream_answer(question: str, chunks: list[Document], model: BaseChatModel) -
     reading one as it is written.
     """
     answer = ""
-    for piece in model.stream(build_prompt(question, chunks)):
+    for piece in model.stream(build_prompt(question, chunks, prompt)):
         answer += piece.content
         yield piece.content
     check_answer_is_not_empty(answer)
 
 
-def answer_question(question: str, chunks: list[Document], model: BaseChatModel) -> str:
+def answer_question(
+    question: str, chunks: list[Document], model: BaseChatModel, prompt: str
+) -> str:
     """The whole answer, once it is finished.
 
     Built on stream_answer so there is one code path, and the streamed and
     unstreamed answers cannot drift apart.
     """
-    return "".join(stream_answer(question, chunks, model))
+    return "".join(stream_answer(question, chunks, model, prompt))

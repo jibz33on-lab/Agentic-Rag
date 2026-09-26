@@ -293,17 +293,20 @@ def test_a_model_that_declines_in_words_is_a_successful_answer():
 
 
 def test_the_production_callable_forwards_every_dependency_to_rag_query():
-    """The one-argument callable the app wants, built from the five rag_query needs.
+    """The one-argument callable the app wants, built from the six rag_query needs.
 
     The API layer depends on `answer_question(question) -> RagQueryResult` and
     nothing else. This is where that shape is manufactured: a closure holding
-    config, embeddings, model and reranker, built once at startup.
+    config, embeddings, model, reranker and the answerer's prompt, built once at
+    startup.
 
     The assertion that matters is `reranker`. rag_query refuses a default for it
     on purpose — "a default of None would let a caller skip reranking by
     forgetting an argument, producing an evaluation_run labelled reranked that
     carries baseline numbers". A new caller is exactly the forgetting this
     guards against, so the test pins that it is forwarded rather than dropped.
+    `prompt` is pinned here for the same reason: a dropped one would answer with
+    whatever the answerer defaults to while the run claimed otherwise.
 
     `query` is injected the same way build_reranker takes `load` and
     build_bm25_retriever takes `client`. Production passes nothing and gets the
@@ -311,17 +314,20 @@ def test_the_production_callable_forwards_every_dependency_to_rag_query():
     """
     seen = {}
 
-    def spy(question, config, embeddings, model, reranker) -> RagQueryResult:
+    def spy(question, config, embeddings, model, reranker, prompt) -> RagQueryResult:
         seen.update(
             question=question,
             config=config,
             embeddings=embeddings,
             model=model,
             reranker=reranker,
+            prompt=prompt,
         )
         return _fake_answer_question(question)
 
-    answer_question = build_answer_question("CONFIG", "EMBEDDINGS", "MODEL", "RERANKER", query=spy)
+    answer_question = build_answer_question(
+        "CONFIG", "EMBEDDINGS", "MODEL", "RERANKER", "PROMPT", query=spy
+    )
 
     result = answer_question("a question")
 
@@ -331,6 +337,7 @@ def test_the_production_callable_forwards_every_dependency_to_rag_query():
         "embeddings": "EMBEDDINGS",
         "model": "MODEL",
         "reranker": "RERANKER",
+        "prompt": "PROMPT",
     }
     assert result.answer == FAKE_ANSWER
 
