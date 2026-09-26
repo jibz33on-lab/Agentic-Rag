@@ -124,6 +124,19 @@ def test_names_the_langsmith_dataset_the_experiments_run_against():
     assert config.langsmith_dataset == "01-basic-rag-benchmark"
 
 
+def test_defaults_the_answerer_prompt_to_baseline():
+    config = load_config(env={"OPENROUTER_API_KEY": "sk-or-test"})
+
+    assert config.answerer_prompt == "baseline"
+
+
+def test_reads_the_answerer_prompt():
+    """The name only. Whether it exists is answerer.py's to say, at startup."""
+    config = load_config(env={"OPENROUTER_API_KEY": "sk-or-test", "ANSWERER_PROMPT": "v1"})
+
+    assert config.answerer_prompt == "v1"
+
+
 def test_rejects_a_candidate_count_no_larger_than_top_k_when_reranking():
     """A reranker fetches CANDIDATE_COUNT candidates and cuts them to TOP_K.
     When the fetch is no wider than the cut there is nothing to choose between,
