@@ -5,9 +5,16 @@ intent, not commitments.
 
 ## Where we are
 
-Project 01 has evaluation, built on LangSmith, and a reranker that was measured
-and switched off. Branch `feat/evaluation-foundations`, eight commits, 84 tests,
-not yet pushed or merged.
+Project 01 answers questions over four documents, is evaluated on LangSmith
+against a 25-question benchmark, and runs on AWS ECS behind an ALB. 118 tests,
+all merged to `main`.
+
+Retrieval is settled for now and is the open problem: `TOP_K=4`, vector search,
+no reranker, `evidence_found` **0.680**. Three separate attempts to rank the
+required chunks higher have failed — see **The retrieval direction** below.
+
+Generation is not the open problem. The `v1` prompt reached `correct` **0.960**
+with `grounded` 1.000, and the one remaining wrong answer is a retrieval miss.
 
 **Read first:** [`projects/01-basic-rag/designs/evaluation.md`](../projects/01-basic-rag/designs/evaluation.md)
 for the architecture and the decisions behind it, and
@@ -31,13 +38,61 @@ at 1.000. A benchmark with no headroom cannot detect an improvement.
 [`designs/reranking.md`](../projects/01-basic-rag/designs/reranking.md). The code
 stays, defaulted off via an empty `RERANKER_MODEL`.
 
-**Next: hybrid search.** BM25 alongside vectors, fused with RRF. It is the larger
-change, because a keyword index reaches back into ingest, but it is now the
-indicated one rather than merely the other candidate: two different semantic
-relevance mechanisms have failed to rank the required chunks higher, and several
-required quotes carry literal tokens that BM25 matches exactly. Reranking is
-worth revisiting on top of it, once the candidate set contains the right chunks
-to promote.
+**Prompt selection was built, and `v1` is live.** Prompts are named, live in
+`src/prompts.py`, and are chosen by `ANSWERER_PROMPT`. The selected name is
+recorded on every experiment, so two prompt runs can be told apart. See
+[`designs/answerer-prompt.md`](../projects/01-basic-rag/designs/answerer-prompt.md)
+and [`designs/answerer-prompt-v1.md`](../projects/01-basic-rag/designs/answerer-prompt-v1.md).
+
+## The retrieval direction
+
+**Hybrid search is not next, and was never built.** A step 0 probe on 2026-09-10
+predicted it would make things worse and the paid run was never justified. See
+the section below.
+
+Three interventions have now tried to rank the required chunks higher, and
+`evidence_rank_reciprocal` has read about 0.46 every time:
+
+| Intervention | `evidence_rank_reciprocal` |
+|---|---|
+| `TOP_K` 1 → 8, an eight-fold widening | 0.32 → 0.50 |
+| Cross-encoder `reranker` | 0.46 → 0.463 |
+| Hybrid RRF fusion (predicted) | 0.463 → 0.450 |
+
+A wider net, a semantic re-scorer and a non-semantic lexical retriever all fail.
+Ranking is not the lever.
+
+**Where the failures actually are.** Measured on the `v1` run, `evidence_found`
+by how many chunks a question needs:
+
+| required chunks | questions | `evidence_found` | `evidence_recall` |
+|---|---|---|---|
+| 1 | 10 | 1.00 | 1.00 |
+| 2 | 5 | 0.80 | 0.90 |
+| 3 | 6 | 0.50 | 0.72 |
+| 4 | 4 | **0.00** | 0.62 |
+
+Single-chunk questions are perfect. Four-chunk questions never succeed. That is
+arithmetic before it is relevance: `TOP_K=4` returns four chunks, so a
+four-chunk question needs all four slots to be exactly right, and one wrong
+chunk scores zero. Each cell is small — the 0.00 is 0 of 4 — so read the trend,
+not the individual numbers.
+
+**The two untried levers do not depend on ranking:**
+
+- **`TOP_K=8`.** Measured at `evidence_found` 0.880 in September, but rejected
+  then because a wider net cost accuracy. `v1` handles partial and noisy
+  evidence far better than `baseline` did, so that trade may have moved. One
+  `.env` change.
+- **A larger `CHUNK_SIZE`.** Turns four-chunk questions into two-chunk ones,
+  attacking the arithmetic rather than the ranking. Needs a re-ingest into a new
+  collection, so it is not a one-line experiment. Keep `CHUNK_OVERLAP` at 200 or
+  above, or the 200-character golden quotes stop being guaranteed to sit inside
+  one chunk.
+
+**Both buy evidence with tokens.** More chunks or bigger chunks both mean a
+larger prompt, which pushes against latency and cost. Expect a trade rather than
+a clean win.
 
 ## TOP_K experiments — 2026-09-08
 
@@ -146,6 +201,30 @@ reranking's own effect rather than the refactor's.
 | gate, no reranker | `bge-m3-1000-200-c098116f` | `e41de0eb-df69-427c-a21c-a0d72fc577d9` |
 | reranked | `bge-m3-1000-200-487d661a` | `caa4adf5-48af-4e53-886d-7b64c645af0f` |
 
+## Hybrid search — 2026-09-10 — predicted, not run
+
+BM25 alongside vectors, fused with RRF. A **step 0 probe** computed what fusion
+would produce from real retrieval output, without calling a model. It predicted
+a regression, so the paid evaluation was never justified and `fusion.py` was
+never written.
+
+| Metric | baseline | predicted hybrid | bar | |
+|---|---|---|---|---|
+| `evidence_found` | 0.680 | **0.640** | ≥ 0.780 | fail |
+| `evidence_rank_reciprocal` | 0.463 | 0.450 | — | unchanged |
+
+Two questions fixed, three broken.
+
+**Why it regresses.** The two top-20 lists overlapped on every question (mean
+11.5, min 6), so only `chunk`s both retrievers agreed on reached the top 4. A
+`chunk` at vector rank 1 but absent from BM25's list scores `1/61 = 0.0164`,
+below every consensus `chunk` at `2/80 = 0.0250`. RRF punishes evidence only one
+retriever finds — whichever one that is. On this corpus vector search is the one
+with more to lose.
+
+Full reasoning and the per-question tables:
+[`designs/hybrid-search.md`](../projects/01-basic-rag/designs/hybrid-search.md).
+
 ## Answerer prompt selection — 2026-09-26
 
 `ANSWERER_PROMPT` now names which of the `answerer`'s prompts to run, and the
@@ -185,6 +264,67 @@ root runs alone reports zero.
 **`v1` does not exist yet.** The registry ships with `baseline` only. Prompt work
 comes after the eight `evidence_found` misses have been read.
 
+## v1 answerer prompt — 2026-09-26
+
+The first prompt experiment. Retrieval frozen at `TOP_K=4`, vector search, no
+reranker; only the prompt changed. `v1` adds a role, a goal, a procedure for
+partial evidence, plain language and bullet structure, keeping both of
+`baseline`'s evidence rules verbatim.
+
+| Metric | baseline | v1 | |
+|---|---|---|---|
+| `correct` | 0.840 | **0.960** | +3 questions |
+| `grounded` | 1.000 | 1.000 | held |
+| `answered_blind` | 0.000 | 0.000 | held |
+| `correct_given_evidence` | 1.000 | 1.000 | held |
+| `evidence_found` | 0.680 | 0.680 | identical |
+| `evidence_recall` | 0.853 | 0.853 | identical |
+| `evidence_rank_reciprocal` | 0.463 | 0.463 | identical |
+| prompt tokens | 22,592 | 24,669 | +9% |
+| completion tokens | 3,429 | 7,741 | **+126%** |
+| latency P50 | 4.00s | **10.62s** | +166% |
+| cost | $0.00195 | $0.00366 | +88% |
+| answers with bullets | 9/25 | 25/25 | |
+| answers citing `[n]` | 0/25 | 8/25 | |
+
+All three retrieval metrics are identical, which is what proves the change was
+generation-only.
+
+**What moved it.** Three questions flipped from flat refusals to structured
+partial answers. `baseline` said "I cannot answer the question about how
+LangGraph can be used to design an AI assistant for loan officers"; `v1` said "I
+can only answer part of your question. Here is what the documents cover and what
+they do not". The judge rules the first `declined`, which scores 0, and the
+second `correct`. The partial-evidence procedure is what did it.
+
+**It was not predicted.** The baseline analysis read `correct_given_evidence`
+1.000 as proof that generation had no headroom left, and said so repeatedly. That
+metric only covers the 17 questions with complete evidence; the eight with
+partial evidence were never in its denominator, and that is exactly where the
+headroom was.
+
+**The costs are real.** 2.7x latency and 1.9x cost for +3 questions. Five
+techniques landed in one version deliberately, so the honest attribution is "v1
+did this", not "the role did this".
+
+**Citations moved without being asked for**, 0/25 to 8/25, almost certainly from
+the goal line's "in a form they can check against the source documents". A future
+citation experiment must be read against 8/25, not 0.
+
+| Run | experiment | session |
+|---|---|---|
+| baseline, on current code | `bge-m3-1000-200-b9037d76` | `f233f7b2-7cce-4b12-9996-7b60e817efe4` |
+| v1 | `bge-m3-1000-200-b71093db` | `f72923af-7c61-4977-a7b7-f3b6e5dfa701` |
+
+**`v1` is live in production** on task definition `basic-rag-api:11`, deployed
+before being benchmarked, deliberately. `baseline` remains
+`DEFAULT_ANSWERER_PROMPT`, so local runs and the benchmark use `baseline` unless
+`ANSWERER_PROMPT` says otherwise.
+
+**Production is not traced.** The task definition carries no `LANGSMITH_API_KEY`
+or `LANGSMITH_TRACING`, so `@traceable` is inert there and `run_id` comes back
+None. Every number in this file was measured locally.
+
 ## Loose ends
 
 - ~~**Committed defaults still name the old dataset.**~~ Fixed 2026-09-09.
@@ -213,14 +353,17 @@ comes after the eight `evidence_found` misses have been read.
   corpus but not rebuild one, so a fresh clone still needs the four files handed
   to it. Closing this means finding where each came from; `data/README.md` has
   the table waiting.
-- **Generation is not the bottleneck.** `correct_given_evidence` was 1.000 at
-  `TOP_K` 1, 2 and 4 — whenever retrieval delivered every required chunk, the
-  answer was right. Work retrieval, not the prompt.
+- ~~**Generation is not the bottleneck.**~~ Half right, and the wrong half cost
+  time. `correct_given_evidence` 1.000 only covers the questions where every
+  required chunk was retrieved. It said nothing about the eight where evidence
+  was partial, and that is where `v1` found three questions by answering the
+  covered part instead of refusing outright. Retrieval is still the larger
+  problem; generation was not finished.
 
 ## Ideas backlog
 
-- ~~**Hybrid search.**~~ Promoted out of the backlog — it is the next piece of
-  work, for the reason the reranking experiment gave it.
+- ~~**Hybrid search.**~~ Dropped 2026-09-10. Step 0 predicted a regression; see
+  the hybrid search section above.
 - **Query decomposition.** The multi-chunk questions are effectively multi-hop.
   Even at `TOP_K=8`, three-chunk questions only reach 0.667 `evidence_found`.
 - **Refusal on unanswerable questions.** Needs adversarial examples that
