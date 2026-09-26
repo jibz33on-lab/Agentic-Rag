@@ -124,9 +124,9 @@ that delivered it.
 
 ## Open questions
 
-- **Whether the sanity check gets a line in `docs/roadmap.md`.** The reranking
-  gate got a short section. One sentence recording what this run reported would
-  tell the next reader the plumbing was checked. Deferred, not decided.
+- ~~**Whether the sanity check gets a line in `docs/roadmap.md`.**~~ Decided: it
+  did. See **Answerer prompt selection — 2026-09-26** there for what the run
+  reported.
 - **No term was added to `DOMAIN_TERMS.md`.** There is still no word for one
   named, selectable `answerer` prompt — `prompt_variant` was proposed and set
   aside in favour of plain names. Relatedly, "prompt" is now ambiguous in this

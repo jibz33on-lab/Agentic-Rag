@@ -146,6 +146,45 @@ reranking's own effect rather than the refactor's.
 | gate, no reranker | `bge-m3-1000-200-c098116f` | `e41de0eb-df69-427c-a21c-a0d72fc577d9` |
 | reranked | `bge-m3-1000-200-487d661a` | `caa4adf5-48af-4e53-886d-7b64c645af0f` |
 
+## Answerer prompt selection — 2026-09-26
+
+`ANSWERER_PROMPT` now names which of the `answerer`'s prompts to run, and the
+name is recorded on the experiment. `baseline` is the prompt every row above was
+measured with, and its text is frozen. See
+[`designs/answerer-prompt.md`](../projects/01-basic-rag/designs/answerer-prompt.md).
+
+A sanity `evaluation_run` at the shipped configuration confirmed the plumbing did
+not change the baseline. **Prompt tokens came back at exactly 22,592**, matching
+the `TOP_K=4` row — the rendered prompt is byte-identical, which is the only part
+of this that can be checked deterministically. Metadata carried
+`answerer_prompt: baseline`.
+
+| Metric | recorded | sanity run | |
+|---|---|---|---|
+| `evidence_found` | 0.680 | 0.680 | exact |
+| `evidence_recall` | 0.853 | 0.853 | exact |
+| `evidence_rank_reciprocal` | 0.46 | 0.463 | exact |
+| `grounded` | 1.000 | 1.000 | exact |
+| `correct` | 0.880 | 0.840 | −1 question |
+| `correct_given_evidence` | 0.941 | 1.000 | +1 of 17 |
+
+Every deterministic number is identical. The two that moved are both judged, and
+they moved in opposite directions: the evidence-found set went 16/17 correct to
+17/17, the evidence-missing set 6/8 to 4/8. Net one question. `temperature=0`
+through OpenRouter routes across ~30 providers and is not bit-reproducible, so
+row-for-row reproduction was deliberately not a pass condition.
+
+Experiment `bge-m3-1000-200-b9037d76`, session
+`f233f7b2-7cce-4b12-9996-7b60e817efe4`. Cost $0.00195.
+
+**These numbers were counted from the API, not read off the UI** — see the loose
+end below. Worth knowing when doing it again: `openrouter_cost` sits on the
+`rag_query` run, which is a child of the root `evaluate()` creates, so summing
+root runs alone reports zero.
+
+**`v1` does not exist yet.** The registry ships with `baseline` only. Prompt work
+comes after the eight `evidence_found` misses have been read.
+
 ## Loose ends
 
 - ~~**Committed defaults still name the old dataset.**~~ Fixed 2026-09-09.
