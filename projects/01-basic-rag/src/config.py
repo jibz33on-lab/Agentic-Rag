@@ -22,6 +22,11 @@ DEFAULT_DATA_FOLDER = "data"
 # 8 since 2026-09-28, measured: evidence_found 0.680 -> 0.880 and correct
 # 0.960 -> 1.000, at +85% prompt tokens. 4 until then.
 DEFAULT_TOP_K = 8
+# Tokens per second below which OpenRouter deprioritises a provider. 50 since
+# 2026-09-28, measured over four runs: latency P50 -34% and throughput +94%
+# against no floor, at flat cost. Set MIN_THROUGHPUT empty to switch it off,
+# which is what reproduces an experiment recorded before it existed.
+DEFAULT_MIN_THROUGHPUT = 50
 # How many candidates the reranker scores before cutting to TOP_K. Unused when
 # RERANKER_MODEL is unset, which is why it does not constrain TOP_K then.
 DEFAULT_CANDIDATE_COUNT = 20
@@ -123,6 +128,13 @@ def load_config(env: Mapping[str, str]) -> Config:
         raise ValueError("OPENROUTER_API_KEY is missing")
 
     top_k = _whole_number(env, "TOP_K", DEFAULT_TOP_K)
+
+    # Absent means the default; present but empty means off. A plain _text would
+    # conflate the two, and "off" is what reproduces a pre-floor experiment.
+    raw_throughput = env.get("MIN_THROUGHPUT", str(DEFAULT_MIN_THROUGHPUT))
+    min_throughput = (
+        _whole_number(env, "MIN_THROUGHPUT", DEFAULT_MIN_THROUGHPUT) if raw_throughput else None
+    )
     reranker_model = env.get("RERANKER_MODEL") or None
     candidate_count = _whole_number(env, "CANDIDATE_COUNT", DEFAULT_CANDIDATE_COUNT)
 
@@ -147,9 +159,7 @@ def load_config(env: Mapping[str, str]) -> Config:
         embedding_model=env.get("EMBEDDING_MODEL") or DEFAULT_EMBEDDING_MODEL,
         answerer_model=_text(env, "ANSWERER_MODEL", DEFAULT_ANSWERER_MODEL),
         answerer_prompt=_text(env, "ANSWERER_PROMPT", DEFAULT_ANSWERER_PROMPT),
-        min_throughput=(
-            _whole_number(env, "MIN_THROUGHPUT", 0) if env.get("MIN_THROUGHPUT") else None
-        ),
+        min_throughput=min_throughput,
         generator_model=env.get("GENERATOR_MODEL") or None,
         judge_model=env.get("JUDGE_MODEL") or None,
         embedding_dimensions=_whole_number(
