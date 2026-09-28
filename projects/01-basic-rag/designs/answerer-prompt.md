@@ -32,6 +32,13 @@ selectable. Nothing supersedes anything, for the same reason the
 collection-per-settings scheme (`config.py:60-70`) keeps every combination alive:
 reproducing the original experiment is the point.
 
+> **Two details have since changed, and this document is not being revised.**
+> It records what was decided on 2026-09-26, which stays true. Since then the
+> prompts moved from `answerer.py` into `src/prompts.py`, and the default is
+> `v1` rather than `baseline` — see the v1 sections in `docs/roadmap.md`.
+> `baseline`'s text is still frozen; it is simply no longer what you get by
+> saying nothing.
+
 ## Scope
 
 **In**

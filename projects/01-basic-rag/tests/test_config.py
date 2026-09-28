@@ -124,10 +124,22 @@ def test_names_the_langsmith_dataset_the_experiments_run_against():
     assert config.langsmith_dataset == "01-basic-rag-benchmark"
 
 
-def test_defaults_the_answerer_prompt_to_baseline():
+def test_defaults_the_answerer_prompt_to_v1():
+    """v1 is what production runs, so it is what a fresh clone should run.
+
+    `baseline` stays in the registry to reproduce the recorded experiments; it
+    is simply no longer the one you get by saying nothing.
+    """
     config = load_config(env={"OPENROUTER_API_KEY": "sk-or-test"})
 
-    assert config.answerer_prompt == "baseline"
+    assert config.answerer_prompt == "v1"
+
+
+def test_defaults_top_k_to_8():
+    """Eight, not four, since 2026-09-28: evidence_found 0.680 -> 0.880."""
+    config = load_config(env={"OPENROUTER_API_KEY": "sk-or-test"})
+
+    assert config.top_k == 8
 
 
 def test_reads_the_answerer_prompt():
