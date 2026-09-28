@@ -12,11 +12,16 @@ DEFAULT_CHUNK_OVERLAP = 200
 # Defaults match docker-compose.yml at the repo root.
 DEFAULT_ANSWERER_MODEL = "deepseek/deepseek-v4-flash-0731"
 DEFAULT_LANGSMITH_DATASET = "01-basic-rag-benchmark"
-# The answerer prompt every recorded experiment was run with. Named rather
-# than spelled out: the text lives with the answerer, this only selects it.
-DEFAULT_ANSWERER_PROMPT = "baseline"
+# What production runs, so what a fresh clone runs. Named rather than spelled
+# out: the text lives with the answerer, this only selects it.
+#
+# `baseline` until 2026-09-28. It stays in the registry, and reproducing a
+# recorded experiment now means asking for it: ANSWERER_PROMPT=baseline.
+DEFAULT_ANSWERER_PROMPT = "v1"
 DEFAULT_DATA_FOLDER = "data"
-DEFAULT_TOP_K = 4
+# 8 since 2026-09-28, measured: evidence_found 0.680 -> 0.880 and correct
+# 0.960 -> 1.000, at +85% prompt tokens. 4 until then.
+DEFAULT_TOP_K = 8
 # How many candidates the reranker scores before cutting to TOP_K. Unused when
 # RERANKER_MODEL is unset, which is why it does not constrain TOP_K then.
 DEFAULT_CANDIDATE_COUNT = 20
