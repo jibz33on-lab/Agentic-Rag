@@ -19,9 +19,14 @@ of twenty-five never get all the evidence they need, all of them multi-chunk.
 Three separate attempts to rank the required chunks higher have failed — see
 **The retrieval direction** below.
 
-**What it costs.** 45,656 prompt tokens and $0.00635 per 25 questions, against
-22,592 and $0.00195 for the original `TOP_K=4` baseline. Accuracy here was
-bought with tokens, not with better ranking.
+**What it costs.** 45,656 prompt tokens and about $0.005 per 25 questions,
+against 22,592 and $0.00195 for the original `TOP_K=4` baseline. Accuracy here
+was bought with tokens, not with better ranking.
+
+**Latency is a routing problem as much as a token problem.** OpenRouter spreads
+requests across nine or more providers differing 4.4x in speed. A
+`MIN_THROUGHPUT` floor of 50 tokens/sec cut latency P50 by 34% at flat cost —
+see the section below.
 
 **Read first:** [`projects/01-basic-rag/designs/evaluation.md`](../projects/01-basic-rag/designs/evaluation.md)
 for the architecture and the decisions behind it, and
@@ -389,6 +394,85 @@ benchmark, not a better number.
 Shipped the same day: task definition `basic-rag-api:13`, and the committed
 defaults in `config.py` moved to match, so a fresh clone runs what production
 runs.
+
+## Provider throughput floor — 2026-09-28
+
+The first latency experiment, and the first to need repeated runs.
+
+**Where the time goes.** On a `TOP_K=8` run, the LLM call is 83% of a question's
+wall clock and retrieval is most of the rest:
+
+```
+rag_query                    5.51s
+  |- VectorStoreRetriever    1.88s   embed the question, search Qdrant
+  \- CostCapturingChatOpenAI 3.12s   the model
+```
+
+**Generation speed varied 5.4x across 25 questions** — 16 to 86.5 tokens/sec —
+and the slowest question produced *fewer* tokens than one that finished in half
+the time. So the spread was throughput, not answer length.
+
+**It was the provider.** Nothing recorded which of OpenRouter's providers served
+a request, so `CostCapturingChatOpenAI` now keeps `provider` the same way it
+keeps `cost`, and `rag_query` writes it to the trace. One run then showed nine
+providers on 25 questions:
+
+| provider | questions | median tok/s |
+|---|---|---|
+| Parasail | 1 | 105.1 |
+| CoreWeave | 3 | 102.5 |
+| Makora | 3 | 96.2 |
+| DeepInfra | 1 | 58.5 |
+| Reka | 3 | 53.7 |
+| StreamLake | 3 | 48.6 |
+| Relace | 4 | 41.3 |
+| OpenInference | 6 | 35.3 |
+| Sail Research | 1 | 23.9 |
+
+**The A/B.** `MIN_THROUGHPUT` goes to OpenRouter as
+`provider.preferred_min_throughput`, which deprioritises slow endpoints while
+keeping them as fallbacks. Two runs with no floor against two at 50:
+
+| | lat P50 | tok/s | cost | `correct` | `evidence_found` | `grounded` |
+|---|---|---|---|---|---|---|
+| control 1 | 15.43s | 29.0 | $0.00524 | 1.000 | 0.880 | 1.000 |
+| control 2 | 10.50s | 28.4 | $0.00528 | 1.000 | 0.880 | 1.000 |
+| floor 50 #1 | **8.49s** | **56.5** | $0.00599 | 0.920 | 0.880 | 1.000 |
+| floor 50 #2 | **8.62s** | **54.8** | $0.00467 | 0.960 | 0.880 | 1.000 |
+
+**Latency P50 −34%, throughput +94%, cost +1%.**
+
+**Two runs each, not one, because latency and cost move on their own.** Two
+runs of an identical configuration earlier that day differed by +6% latency and
+−21% cost. A single pair could not have separated a real effect from that.
+
+**Why it is believable.** No overlap: both treatments beat both controls, and
+the treatments cluster tightly (8.49 / 8.62) where the controls spread (15.43 /
+10.50) — the shape of a slow tail being removed rather than everything shifting.
+`Sail Research`, the slowest at 23.9 tok/s, took 12 and 9 of 25 questions in the
+controls and **zero** in both treatments. Throughput is the more reliable of the
+two headline numbers, since it measures generation directly rather than the luck
+of which provider answered.
+
+**`correct` slipped to 0.920 and 0.960 from 1.000.** Probably judge variance on
+the three partial-evidence questions, where every previous wobble has landed —
+`evidence_found` and `grounded` are identical across all four runs, and a
+mechanism where faster providers answer worse is hard to argue. Not ruled out
+on two runs against two. Worth watching.
+
+**50 is not an optimum.** It beat no floor; 40, 70 and 90 were never tested. The
+honest claim is "a floor of 50 beat no floor". A probe at `p90>=90` still landed
+on a provider running 10.7 tok/s, so higher floors buy less than they appear to.
+
+| Run | experiment |
+|---|---|
+| control 1 | `bge-m3-1000-200-c65e604a` |
+| control 2 | `bge-m3-1000-200-44d80189` |
+| floor 50 #1 | `bge-m3-1000-200-19205e63` |
+| floor 50 #2 | `bge-m3-1000-200-5927a5da` |
+
+Shipped the same day: `.env`, `DEFAULT_MIN_THROUGHPUT` in `config.py`, and the
+ECS task definition.
 
 ## Loose ends
 

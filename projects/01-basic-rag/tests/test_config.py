@@ -149,10 +149,19 @@ def test_reads_the_answerer_prompt():
     assert config.answerer_prompt == "v1"
 
 
-def test_has_no_throughput_floor_by_default():
-    """Unset means no provider preference at all, which is how every recorded
-    experiment ran. A default here would silently change routing."""
+def test_defaults_the_throughput_floor_to_50():
+    """50 since 2026-09-28: latency P50 -34% and throughput +94% against no
+    floor, at flat cost. Unset would put a fresh clone back on the routing
+    lottery that production no longer runs."""
     config = load_config(env={"OPENROUTER_API_KEY": "sk-or-test"})
+
+    assert config.min_throughput == 50
+
+
+def test_allows_the_throughput_floor_to_be_switched_off():
+    """Explicitly empty means no provider preference, which is what reproduces
+    a recorded experiment from before the floor existed."""
+    config = load_config(env={"OPENROUTER_API_KEY": "sk-or-test", "MIN_THROUGHPUT": ""})
 
     assert config.min_throughput is None
 
