@@ -9,12 +9,19 @@ Project 01 answers questions over four documents, is evaluated on LangSmith
 against a 25-question benchmark, and runs on AWS ECS behind an ALB. 118 tests,
 all merged to `main`.
 
-Retrieval is settled for now and is the open problem: `TOP_K=4`, vector search,
-no reranker, `evidence_found` **0.680**. Three separate attempts to rank the
-required chunks higher have failed — see **The retrieval direction** below.
+**The shipped configuration is `TOP_K=8` with the `v1` prompt**, and it answers
+every benchmark question correctly: `correct` **1.000**, `grounded` **1.000**,
+`evidence_found` **0.880**. Both are the committed defaults and both are set on
+the ECS task definition.
 
-Generation is not the open problem. The `v1` prompt reached `correct` **0.960**
-with `grounded` 1.000, and the one remaining wrong answer is a retrieval miss.
+**Retrieval is still the open problem**, just a smaller one. Three questions out
+of twenty-five never get all the evidence they need, all of them multi-chunk.
+Three separate attempts to rank the required chunks higher have failed — see
+**The retrieval direction** below.
+
+**What it costs.** 45,656 prompt tokens and $0.00635 per 25 questions, against
+22,592 and $0.00195 for the original `TOP_K=4` baseline. Accuracy here was
+bought with tokens, not with better ranking.
 
 **Read first:** [`projects/01-basic-rag/designs/evaluation.md`](../projects/01-basic-rag/designs/evaluation.md)
 for the architecture and the decisions behind it, and
@@ -62,8 +69,9 @@ Three interventions have now tried to rank the required chunks higher, and
 A wider net, a semantic re-scorer and a non-semantic lexical retriever all fail.
 Ranking is not the lever.
 
-**Where the failures actually are.** Measured on the `v1` run, `evidence_found`
-by how many chunks a question needs:
+**Where the failures actually are.** Measured on the `v1` run at `TOP_K=4`,
+`evidence_found` by how many chunks a question needs. This table is what
+motivated `TOP_K=8`; the section below has the post-change numbers:
 
 | required chunks | questions | `evidence_found` | `evidence_recall` |
 |---|---|---|---|
@@ -78,21 +86,18 @@ four-chunk question needs all four slots to be exactly right, and one wrong
 chunk scores zero. Each cell is small — the 0.00 is 0 of 4 — so read the trend,
 not the individual numbers.
 
-**The two untried levers do not depend on ranking:**
+**Neither remaining lever depends on ranking:**
 
-- **`TOP_K=8`.** Measured at `evidence_found` 0.880 in September, but rejected
-  then because a wider net cost accuracy. `v1` handles partial and noisy
-  evidence far better than `baseline` did, so that trade may have moved. One
-  `.env` change.
-- **A larger `CHUNK_SIZE`.** Turns four-chunk questions into two-chunk ones,
-  attacking the arithmetic rather than the ranking. Needs a re-ingest into a new
-  collection, so it is not a one-line experiment. Keep `CHUNK_OVERLAP` at 200 or
-  above, or the 200-character golden quotes stop being guaranteed to sit inside
-  one chunk.
+- ~~**`TOP_K=8`.**~~ Done 2026-09-28 and shipped. `evidence_found` 0.680 →
+  **0.880**, `correct` 0.960 → **1.000**. See the section below.
+- **A larger `CHUNK_SIZE`.** Still untried. Turns four-chunk questions into
+  two-chunk ones, attacking the arithmetic rather than the ranking. Needs a
+  re-ingest into a new collection, so it is not a one-line experiment. Keep
+  `CHUNK_OVERLAP` at 200 or above, or the 200-character golden quotes stop being
+  guaranteed to sit inside one chunk.
 
-**Both buy evidence with tokens.** More chunks or bigger chunks both mean a
-larger prompt, which pushes against latency and cost. Expect a trade rather than
-a clean win.
+**Both buy evidence with tokens**, and `TOP_K=8` proved it: +85% prompt tokens
+for +5 questions. Better ranking would have been free; nothing has delivered it.
 
 ## TOP_K experiments — 2026-09-08
 
@@ -324,6 +329,66 @@ before being benchmarked, deliberately. `baseline` remains
 **Production is not traced.** The task definition carries no `LANGSMITH_API_KEY`
 or `LANGSMITH_TRACING`, so `@traceable` is inert there and `run_id` comes back
 None. Every number in this file was measured locally.
+
+## TOP_K=8 — 2026-09-28 — shipped
+
+`TOP_K` 4 → 8 with the `v1` prompt. Nothing else changed: same collection, same
+`embedding_model`, no `reranker`, same dataset, same judge. No re-ingest was
+needed — `TOP_K` is not part of the collection name.
+
+| Metric | `TOP_K=4` | `TOP_K=8` | |
+|---|---|---|---|
+| `evidence_found` | 0.680 | **0.880** | 17 → 22 questions |
+| `evidence_recall` | 0.853 | 0.953 | |
+| `evidence_rank_reciprocal` | 0.463 | 0.498 | barely moved, as ever |
+| `correct` | 0.960 | **1.000** | 25 of 25 |
+| `grounded` | 1.000 | 1.000 | held |
+| `answered_blind` | 0.000 | 0.000 | held |
+| `correct_given_evidence` | 1.000 | 1.000 | now over 22 questions, not 17 |
+| prompt tokens | 24,669 | 45,656 | +85% |
+| completion tokens | 7,741 | 8,750 | +13% |
+| cost | $0.00366 | $0.00635 | +73% |
+| latency P50 | 10.62s | **7.68s** | −28% |
+
+**Every question is answered correctly**, including the three that still lack
+complete evidence. `v1`'s partial-evidence procedure answers the covered part
+and says what is missing, and the judge rules that correct. The prompt work and
+the retrieval work compound: neither reached 1.000 alone.
+
+**Latency fell, which was not predicted.** The prompt grew 85% and answers got
+*faster*. The likely cause is less hedging — with more evidence the model spends
+fewer tokens explaining what it could not cover, and completion tokens rose only
+13% while prompt tokens rose 85%. Output dominates generation time. Treat as
+provisional until it reproduces; one run cannot separate this from OpenRouter
+routing variance.
+
+**The three questions still missing evidence**, all multi-chunk:
+
+| needs | `evidence_recall` | question |
+|---|---|---|
+| 3 quotes | 0.67 | building a stateful agent workflow in LangGraph |
+| 3 quotes | 0.67 | LangGraph for a loan-officer assistant |
+| 4 quotes | 0.50 | Reflexion-based RAG pipeline |
+
+**A worked example of why it helped.** On the Adaptive RAG question, three of
+four required quotes sat at ranks 1, 3 and 4 — and the fourth at **rank 5**, one
+position outside the old cut. `TOP_K=8` reached it and the question went
+`evidence_found` 0 → 1. That was predicted from the rankings before the run, and
+it is the whole mechanism: the chunks were always there, just below the line.
+
+**On the 90% target.** 0.880 is one question short of 0.90, and on 25 examples
+one question is 4 points — well inside the noise that moved `correct` by a whole
+question between two runs of an identical prompt. Certifying 90% needs a larger
+benchmark, not a better number.
+
+| Run | experiment | session |
+|---|---|---|
+| v1 at `TOP_K=4` | `bge-m3-1000-200-b71093db` | `f72923af-7c61-4977-a7b7-f3b6e5dfa701` |
+| v1 at `TOP_K=8` | `bge-m3-1000-200-46660a3c` | `666e29ee-5adc-40c6-a50a-1338ce2ebec8` |
+
+Shipped the same day: task definition `basic-rag-api:13`, and the committed
+defaults in `config.py` moved to match, so a fresh clone runs what production
+runs.
 
 ## Loose ends
 
