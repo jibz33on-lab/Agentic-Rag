@@ -12,7 +12,7 @@ OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 
 class CostCapturingChatOpenAI(ChatOpenAI):
-    """A chat model that keeps the cost OpenRouter reports.
+    """A chat model that keeps the cost and provider OpenRouter reports.
 
     OpenRouter returns what a request actually cost. It knows which of its ~30
     providers served the request, and they charge differently, so the figure is
@@ -28,14 +28,20 @@ class CostCapturingChatOpenAI(ChatOpenAI):
     and every evaluation_run loses its cost column without anything failing —
     which is why test_keeps_the_openrouter_cost_that_langchain_drops exists.
 
-    The captured usage is per-instance and overwritten by each request. That is
-    safe only because evaluation asks one question at a time.
+    `provider` is taken from the same place, for the same reason and with the
+    same fragility. It names which of the ~30 providers served the request, and
+    they differ by more than 5x in throughput — so without it a slow answer
+    cannot be told apart from a slow server.
+
+    The captured values are per-instance and overwritten by each request. That
+    is safe only because evaluation asks one question at a time.
     """
 
     last_usage: dict | None = None
+    last_provider: str | None = None
 
     def _stream(self, *args, **kwargs):
-        """Clear the captured usage before each request.
+        """Clear what was captured before each request.
 
         Here rather than in the caller: a request that dies before reporting
         usage would otherwise leave the previous question's cost in place, and
@@ -43,12 +49,16 @@ class CostCapturingChatOpenAI(ChatOpenAI):
         anything looking wrong.
         """
         self.last_usage = None
+        self.last_provider = None
         yield from super()._stream(*args, **kwargs)
 
     def _convert_chunk_to_generation_chunk(self, chunk, default_chunk_class, base_generation_info):
         usage = chunk.get("usage")
         if usage:
             self.last_usage = dict(usage)
+        provider = chunk.get("provider")
+        if provider:
+            self.last_provider = provider
         return super()._convert_chunk_to_generation_chunk(
             chunk, default_chunk_class, base_generation_info
         )

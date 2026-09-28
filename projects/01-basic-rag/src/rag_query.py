@@ -37,8 +37,8 @@ class RagQueryResult:
     run_id: str | None
 
 
-def record_cost(run_tree, usage: dict | None) -> None:
-    """Put OpenRouter's cost on the current run, where the UI can show it.
+def record_openrouter_metadata(run_tree, usage: dict | None, provider: str | None) -> None:
+    """Put OpenRouter's cost and provider on the run, where the UI can show them.
 
     LangSmith fills its own cost column by pricing the model itself, and it does
     not price the ones we reach through OpenRouter — so that column stays empty
@@ -50,15 +50,25 @@ def record_cost(run_tree, usage: dict | None) -> None:
     the provider it routed to charges. That gives two costs on one screen that
     disagree, which is worse than one cost you have to know where to find.
 
-    Does nothing without a run tree — tracing may be off — and nothing without a
-    cost, so a provider that stops reporting one leaves no misleading zero.
+    `openrouter_provider` names which of the ~30 providers actually served the
+    request. They differ by more than 5x in throughput, so without it a slow run
+    cannot be told apart from a slow server, and no latency comparison between
+    two experiments means very much.
+
+    Does nothing without a run tree — tracing may be off. Each value is written
+    only if present, so a provider that stops reporting a cost leaves no
+    misleading zero rather than losing the provider name too.
     """
-    if run_tree is None or not usage:
+    if run_tree is None:
         return
-    cost = usage.get("cost")
-    if cost is None:
-        return
-    run_tree.add_metadata({"openrouter_cost": cost})
+    recorded = {}
+    cost = (usage or {}).get("cost")
+    if cost is not None:
+        recorded["openrouter_cost"] = cost
+    if provider:
+        recorded["openrouter_provider"] = provider
+    if recorded:
+        run_tree.add_metadata(recorded)
 
 
 @traceable(name="rag_query", run_type="chain")
@@ -98,7 +108,9 @@ def rag_query(
         answer += piece
 
     # After the stream, not during: the usage chunk is the last thing to arrive.
-    record_cost(run_tree, getattr(model, "last_usage", None))
+    record_openrouter_metadata(
+        run_tree, getattr(model, "last_usage", None), getattr(model, "last_provider", None)
+    )
     return RagQueryResult(
         answer=answer, chunks=chunks, run_id=str(run_tree.id) if run_tree else None
     )

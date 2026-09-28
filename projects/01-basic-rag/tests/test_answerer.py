@@ -69,6 +69,18 @@ def test_keeps_the_openrouter_cost_that_langchain_drops(live_openrouter_config):
     assert model.last_usage.get("cost") is not None
 
 
+def test_keeps_the_openrouter_provider_that_langchain_drops(live_openrouter_config):
+    """OpenRouter says which of its ~30 providers served the request, and they
+    differ by more than 5x in throughput. LangChain drops it, so without this
+    a slow answer cannot be told from a slow server.
+    """
+    model = build_chat_model(live_openrouter_config)
+
+    list(model.stream("Say the word yes."))
+
+    assert model.last_provider is not None
+
+
 def test_forgets_the_previous_cost_when_a_request_fails(live_openrouter_config):
     """A failed request must not inherit the last one's cost.
 
