@@ -331,9 +331,9 @@ before being benchmarked, deliberately. `baseline` remains
 `DEFAULT_ANSWERER_PROMPT`, so local runs and the benchmark use `baseline` unless
 `ANSWERER_PROMPT` says otherwise.
 
-**Production is not traced.** The task definition carries no `LANGSMITH_API_KEY`
-or `LANGSMITH_TRACING`, so `@traceable` is inert there and `run_id` comes back
-None. Every number in this file was measured locally.
+**Production was not traced when this ran.** Every number in this file was
+measured locally. Tracing was switched on later the same week — see **Production
+tracing** below.
 
 ## TOP_K=8 — 2026-09-28 — shipped
 
@@ -474,6 +474,39 @@ on a provider running 10.7 tok/s, so higher floors buy less than they appear to.
 Shipped the same day: `.env`, `DEFAULT_MIN_THROUGHPUT` in `config.py`, and the
 ECS task definition.
 
+## Production tracing — 2026-09-28
+
+The deployed API now sends its traces to LangSmith, so a live answer can be
+looked at after the fact. Before this, nothing was watching production.
+
+**Traces go to `01-basic-rag-prod`**, a separate project, so real traffic does
+not mix into `01-basic-rag` where the experiments live.
+
+**What it took.** The LangSmith key went into SSM as a SecureString at
+`/basic-rag/langsmith-api-key`, `ecsTaskExecutionRole` got a policy scoped to
+that one parameter, and the task definition (revision 17) gained the key as a
+secret plus `LANGSMITH_TRACING=true` and `LANGSMITH_PROJECT`. All of it mirrors
+how the OpenRouter key was already set up.
+
+**Verified working.** A live query produced:
+
+```
+rag_query  11.99s
+  openrouter_cost     = $0.000090
+  openrouter_provider = Relace
+```
+
+Both fields come from the work earlier that day, so production now reports what
+each answer cost and which provider served it.
+
+**Cost.** The free tier allows 5,000 traces a month and does not roll over.
+Experiments use about 2,300. Each API query adds 4 traces, so roughly 40 queries
+a day would fill what is left. `LANGSMITH_TRACING_SAMPLING_RATE` traces a
+fraction if traffic ever grows.
+
+**Every trace carries the retrieved chunk text to LangSmith.** Fine for four
+public PDFs. Worth revisiting if the corpus ever holds anything private.
+
 ## Loose ends
 
 - ~~**Committed defaults still name the old dataset.**~~ Fixed 2026-09-09.
@@ -498,6 +531,14 @@ ECS task definition.
   Harmless — `bge-m3-1000-200` is unaffected — but it makes the collection
   list unreadable, which is exactly where you look when a container answers
   200 from the wrong place. Found while verifying the container.
+- **Some AWS setup exists only in AWS.** The SSM parameters and the
+  `ecsTaskExecutionRole` policies were made by hand and are not in `infra/`, so
+  a rebuild from Terraform would not recreate them. The task definition is
+  deliberately not Terraform's — see `infra/ecs.tf` — but these are just
+  untracked.
+- **The API response carries no `run_id`.** `rag_query` returns one and the
+  trace exists, but `api.py` returns only `answer`, `chunks` and `request_id`,
+  so a caller cannot link their request to its trace.
 - **The corpus sources were never written down.** The manifest can verify a
   corpus but not rebuild one, so a fresh clone still needs the four files handed
   to it. Closing this means finding where each came from; `data/README.md` has
