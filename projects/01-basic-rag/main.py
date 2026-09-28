@@ -322,6 +322,10 @@ def run_evaluation(config):
             # timestamp. Taken from the same value that was resolved and run,
             # so the label cannot disagree with what the answerer received.
             "answerer_prompt": config.answerer_prompt,
+            # None means the routing lottery; a number means a floor was asked
+            # for. Without this two runs at different floors are identical in
+            # metadata and separable only by timestamp.
+            "min_throughput": config.min_throughput,
             "judge_model": config.judge_model,
         },
         max_concurrency=1,

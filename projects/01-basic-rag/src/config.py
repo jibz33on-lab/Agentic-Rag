@@ -47,6 +47,11 @@ class Config:
     # config.py cannot import the registry without a cycle, so answerer.py
     # checks the name at startup and lists the ones that exist.
     answerer_prompt: str
+    # Tokens per second. OpenRouter deprioritises endpoints whose measured
+    # throughput falls below it, keeping them as fallbacks rather than
+    # excluding them. None means no preference — how every recorded
+    # experiment ran, and the routing lottery that produced a 4.4x spread.
+    min_throughput: int | None
     generator_model: str | None
     judge_model: str | None
     embedding_dimensions: int
@@ -142,6 +147,9 @@ def load_config(env: Mapping[str, str]) -> Config:
         embedding_model=env.get("EMBEDDING_MODEL") or DEFAULT_EMBEDDING_MODEL,
         answerer_model=_text(env, "ANSWERER_MODEL", DEFAULT_ANSWERER_MODEL),
         answerer_prompt=_text(env, "ANSWERER_PROMPT", DEFAULT_ANSWERER_PROMPT),
+        min_throughput=(
+            _whole_number(env, "MIN_THROUGHPUT", 0) if env.get("MIN_THROUGHPUT") else None
+        ),
         generator_model=env.get("GENERATOR_MODEL") or None,
         judge_model=env.get("JUDGE_MODEL") or None,
         embedding_dimensions=_whole_number(

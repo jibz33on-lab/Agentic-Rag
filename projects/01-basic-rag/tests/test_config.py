@@ -149,6 +149,22 @@ def test_reads_the_answerer_prompt():
     assert config.answerer_prompt == "v1"
 
 
+def test_has_no_throughput_floor_by_default():
+    """Unset means no provider preference at all, which is how every recorded
+    experiment ran. A default here would silently change routing."""
+    config = load_config(env={"OPENROUTER_API_KEY": "sk-or-test"})
+
+    assert config.min_throughput is None
+
+
+def test_reads_the_throughput_floor():
+    """Tokens per second. OpenRouter deprioritises endpoints below it, keeping
+    them as fallbacks rather than excluding them."""
+    config = load_config(env={"OPENROUTER_API_KEY": "sk-or-test", "MIN_THROUGHPUT": "50"})
+
+    assert config.min_throughput == 50
+
+
 def test_rejects_a_candidate_count_no_larger_than_top_k_when_reranking():
     """A reranker fetches CANDIDATE_COUNT candidates and cuts them to TOP_K.
     When the fetch is no wider than the cut there is nothing to choose between,
