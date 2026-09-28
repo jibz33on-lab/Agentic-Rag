@@ -76,7 +76,19 @@ def build_chat_model(config: Config) -> CostCapturingChatOpenAI:
     so it goes through extra_body, which passes options straight to the
     provider. It is also why the thinking was invisible: LangChain reads the
     stream, keeps `content`, and silently drops the `reasoning` field.
+
+    `min_throughput` goes through the same door. OpenRouter routes across ~30
+    providers whose speed differs by more than 4x, and a request lands on
+    whichever it picks. Setting a floor deprioritises the slow ones without
+    excluding them, so a slow provider is still better than no answer.
+
+    Sent only when set. An empty `provider` block is not the same as no
+    preference, and every recorded experiment ran without one.
     """
+    provider: dict = {}
+    if config.min_throughput:
+        provider = {"preferred_min_throughput": {"p90": config.min_throughput}}
+
     return CostCapturingChatOpenAI(
         model=config.answerer_model,
         api_key=config.openrouter_api_key,
@@ -91,6 +103,7 @@ def build_chat_model(config: Config) -> CostCapturingChatOpenAI:
             "reasoning": {"enabled": False},
             # OpenRouter's own switch for reporting cost, through the same door.
             "usage": {"include": True},
+            **({"provider": provider} if provider else {}),
         },
     )
 
