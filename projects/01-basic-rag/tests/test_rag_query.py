@@ -4,7 +4,7 @@ from langchain_core.documents import Document
 from langchain_core.embeddings import DeterministicFakeEmbedding
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 from prompts import BASELINE_PROMPT
-from rag_query import rag_query, record_cost
+from rag_query import rag_query, record_openrouter_metadata
 
 SOURCE = Document(
     page_content="hybrid search runs both searches in parallel",
@@ -68,15 +68,15 @@ def test_records_the_openrouter_cost_on_the_current_run():
     """
     tree = FakeRunTree()
 
-    record_cost(tree, {"cost": 9.18e-06, "prompt_tokens": 14})
+    record_openrouter_metadata(tree, {"cost": 9.18e-06, "prompt_tokens": 14}, "Fireworks")
 
-    assert tree.added == [{"openrouter_cost": 9.18e-06}]
+    assert tree.added == [{"openrouter_cost": 9.18e-06, "openrouter_provider": "Fireworks"}]
 
 
 def test_records_nothing_when_tracing_is_off():
     """get_current_run_tree() returns None with tracing disabled, and an
     evaluation_run must still score retrieval and generation without it."""
-    assert record_cost(None, {"cost": 9.18e-06}) is None
+    assert record_openrouter_metadata(None, {"cost": 9.18e-06}, "Fireworks") is None
 
 
 def test_records_nothing_when_the_provider_reported_no_cost():
@@ -84,6 +84,17 @@ def test_records_nothing_when_the_provider_reported_no_cost():
     as a free request rather than an unknown one."""
     tree = FakeRunTree()
 
-    record_cost(tree, {"prompt_tokens": 14})
+    record_openrouter_metadata(tree, {"prompt_tokens": 14}, None)
 
     assert tree.added == []
+
+
+def test_records_the_provider_even_when_the_cost_is_missing():
+    """The two are written independently. A provider that stops reporting cost
+    would otherwise take the provider name down with it, and the provider is
+    what explains a slow run."""
+    tree = FakeRunTree()
+
+    record_openrouter_metadata(tree, {"prompt_tokens": 14}, "Fireworks")
+
+    assert tree.added == [{"openrouter_provider": "Fireworks"}]
