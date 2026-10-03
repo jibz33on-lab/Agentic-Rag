@@ -18,6 +18,13 @@ code.
 > none of those four are drafts. Still AI-proposed drafts: `document`,
 > `tool_call`, `trace`, and the four Docker terms under **Shipping it** —
 > proposed 2026-09-15 in the containerisation session and not yet read back.
+>
+> **Project 02.** Which AWS words to adopt was settled by the user on 2026-09-30
+> in the project 02 skeleton session: AWS's names for AWS's things, our own terms
+> kept where they are shared across both projects, and no abstraction invented to
+> make the two agree. The definitions and the *Not:* lines under **AWS-native RAG**
+> are AI-drafted and not yet read back, as are the four new entries under
+> **Ambiguous words**.
 
 ---
 
@@ -230,6 +237,85 @@ dependencies are installed before the source is copied.
 
 ---
 
+---
+
+## AWS-native RAG — project 02
+
+**We use AWS's names wherever AWS supplies the thing**, for the same reason we
+use LangChain's and Docker's: they are the words in the docs, the console and the
+error messages. Project 02 exists to learn AWS, and a private synonym for
+`ingestion_job` would teach the wrong word.
+
+Our own terms — `chunk`, `answerer`, `rag_query`, `evaluation_run` — stay. They
+are the spine that lets the two projects be compared: an `evaluation_run`
+measures `rag_query`s, and if project 02 called that something else the
+comparison would lose its shared noun.
+
+No abstraction is introduced to make the two projects share vocabulary. Where
+they differ the words differ, because the differences are the thing being studied.
+
+### `knowledge_base`
+Bedrock's managed retrieval resource. It owns chunking, embedding, storage and
+search over a set of `data_source`s. Ours is customer-managed, backed by a
+`vector_bucket`.
+
+*Not:* a `vector_store`. A `vector_store` is something project 01 constructs and
+calls; a `knowledge_base` is a resource that owns its own storage and is
+configured rather than driven. It has no single counterpart in project 01 — the
+nearest thing is `indexing`, `vector_store` and `retriever` taken together.
+
+### `data_source`
+Where a `knowledge_base` gets its `document`s. Ours is an S3 bucket reached
+through the S3 connector, which is credential-free.
+
+*Not:* the `document`s, and not the bucket. It is the configured link between the
+two, and it carries the chunking strategy.
+
+### `ingestion_job`
+One run of a `data_source` being read into its `knowledge_base` — load, chunk,
+embed, store. Started with `start-ingestion-job` and polled to completion.
+
+*Not:* instant. A `Retrieve` issued before it finishes returns empty rather than
+failing, which is the failure mode most likely to be mistaken for a bug.
+
+*Not:* `indexing`. Both are the re-runnable load-and-store pass, but `indexing`
+is a function project 01 calls and waits on in-process, while an `ingestion_job`
+is an asynchronous job AWS runs on our behalf.
+
+### `vector_bucket`
+The S3 Vectors bucket a `knowledge_base` stores its vectors in. A dedicated
+resource addressed by `vectorBucketArn`, not a regular S3 bucket.
+
+*Not:* the S3 bucket holding the `document`s. Two different buckets, and
+conflating them is how an IAM policy ends up granting the wrong thing.
+
+*Not:* something we query. Only the `knowledge_base` reads it.
+
+### `Retrieve`
+The Bedrock API that returns `chunk`s for a query. Semantic only on a
+`vector_bucket`: `overrideSearchType: HYBRID` requires OpenSearch Serverless,
+Aurora PostgreSQL or MongoDB Atlas.
+
+*Not:* a `retriever`. There is no object to construct and hold — it is one call.
+
+### `RetrieveAndGenerate`
+The Bedrock API that retrieves and answers in a single call, with citations.
+
+*Not:* what we use. Project 02 keeps retrieval and `generation` separate so the
+`answerer` and its prompt stay ours and stay comparable with project 01's. It is
+named here because it is the obvious thing to reach for, and choosing not to is a
+design decision rather than an oversight.
+
+### `foundation_model`
+Bedrock's name for a model you invoke — `anthropic.claude-…`,
+`amazon.titan-embed-text-v2:0`. Named in `knowledge_base` configuration and in
+`Converse` calls.
+
+*Not:* the `answerer`. The `answerer` is a `foundation_model` plus a prompt, as
+it has always been.
+
+---
+
 ## Ambiguous words
 
 ### `service`
@@ -259,6 +345,42 @@ When it is not obviously the first, say which one.
 ### `document`
 Means both a whole source file and one split piece of it, because LangChain uses
 one type for both. Say `chunk` when you mean a piece.
+
+### `indexing`
+Project 01 only. LangChain's `index()` — see `index` above. Project 02's
+equivalent pass is an `ingestion_job`, and the two are deliberately not given the
+same name: one is a function we call and wait on in-process, the other is an
+asynchronous job AWS runs for us.
+
+### `vector_store`
+1. **Project 01** — `QdrantVectorStore`, a LangChain object we construct, call,
+   and hand to a `retriever`.
+2. **Project 02** — nothing. The `knowledge_base` owns storage, and the
+   `vector_bucket` underneath it is never addressed directly.
+
+Say `vector_bucket` for project 02's storage. Do not say `vector_store` about
+project 02 at all — there is no such object to point at.
+
+### `retriever`
+1. **Project 01** — a LangChain object from `vector_store.as_retriever()`,
+   configured with a search type and `TOP_K`.
+2. **Project 02** — no such object. Retrieval is a `Retrieve` call taking
+   `numberOfResults`.
+
+The asymmetry is worth keeping rather than smoothing over: project 01 holds a
+retriever, project 02 makes a request. That difference is a large part of what
+the two projects are being compared on.
+
+### `embedding_model`
+1. **Project 01** — `baai/bge-m3` through OpenRouter at 1024 dimensions,
+   constructed by us and passed where it is needed.
+2. **Project 02** — a Bedrock `foundation_model`, Titan Embed Text V2 by
+   default, named in `knowledge_base` configuration and never called by us
+   directly.
+
+Same idea, different thing, and the vectors are not comparable. A retrieval
+number from one project is not a retrieval number from the other, which is why
+the benchmark compares answers rather than distances.
 
 ## Adding a term
 

@@ -54,7 +54,12 @@ data/*
 # secrets -- it never belongs in a public repo. .terraform/ is a download cache.
 # .terraform.lock.hcl is deliberately NOT ignored: it pins provider checksums
 # and is the thing that makes an apply reproducible.
-infra/.terraform/
+#
+# Unanchored, because `infra/.terraform/` matched only the repo-root infra/ and
+# missed projects/02-bedrock-rag/infra/core/ -- 746 MB of provider binary that
+# was untracked and unignored, and would have been committed. The state and plan
+# patterns below were already unanchored and so already covered it.
+**/.terraform/
 *.tfstate
 *.tfstate.*
 *.tfplan
