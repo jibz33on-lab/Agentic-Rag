@@ -79,7 +79,7 @@ resource "aws_ecs_service" "api" {
   name            = "basic-rag-api-service"
   cluster         = aws_ecs_cluster.main.id
   task_definition = "basic-rag-api:6"
-  desired_count   = 1
+  desired_count   = var.services_paused ? 0 : 1
 
   capacity_provider_strategy {
     capacity_provider = "FARGATE"
@@ -139,7 +139,7 @@ resource "aws_ecs_service" "qdrant" {
   # family:revision, which is the form AWS stores. Using .arn here is also
   # valid but shows as permanent drift against the imported value.
   task_definition = "${aws_ecs_task_definition.qdrant.family}:${aws_ecs_task_definition.qdrant.revision}"
-  desired_count   = 1
+  desired_count   = var.services_paused ? 0 : 1
 
   capacity_provider_strategy {
     capacity_provider = "FARGATE"

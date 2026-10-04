@@ -79,3 +79,22 @@ variable "cloudfront_enabled" {
   type        = bool
   default     = false
 }
+
+variable "services_paused" {
+  description = <<-EOF2
+    Scale both ECS services (API and Qdrant) to zero tasks.
+
+    A pause, not a teardown. Fargate bills per running task, and each task also
+    holds a public IPv4 address, so zero tasks stops roughly $60/month while the
+    cluster, task definitions, ALB, CloudFront, EFS, ECR and S3 all stay. Qdrant's
+    vectors live on EFS, so nothing is lost.
+
+    While paused, CloudFront still serves the frontend but /query and /health
+    return 503 from the ALB, because its target group is empty.
+
+    Resume with services_paused = false in terraform.tfvars and one apply. CI
+    deploys do not set desired count, so a push to main will not undo the pause.
+  EOF2
+  type        = bool
+  default     = false
+}

@@ -18,3 +18,7 @@
 # The ALB teardown is two applies -- see var.keep_alb_sg.
 alb_enabled        = true
 cloudfront_enabled = true
+
+# Paused 2026-10-04: project 02 (Bedrock) is the active work, and the two
+# Fargate tasks were most of the bill. See var.services_paused.
+services_paused = true
