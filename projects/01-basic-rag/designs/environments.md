@@ -49,6 +49,13 @@ shape STAGING and PROD would take if they are ever built.
   a different thing from an environment — see **The remaining roadmap**.
 - **Any change to Python.** Not one line of `api.py`, `asgi.py` or `src/`.
 
+> **Scope is as it was written, and is not being revised.** It records what this
+> session excluded, which stays true whatever happened afterwards. Three of the
+> items above have since been built — IaC, reproducible ingestion, and the `ALB`
+> — each as its own step with its own verification. **Known gaps** and **The
+> remaining roadmap** carry the current state; this list carries the original
+> boundary.
+
 ## Design
 
 ### One environment, and it is DEV
@@ -499,6 +506,14 @@ a scheduled debt with a date attached, not a permanent quirk.
 | `ecsTaskExecutionRole` | unchanged — shared by design | never |
 | `github-actions-basic-rag-deploy` | unchanged while one environment exists | STAGING |
 
+> **Terraform landed and the renames did not.** The estate was adopted by
+> `import`, which by definition takes resources under the names they already
+> have, and renaming any of them would mean destroying and recreating them —
+> exactly what the table's own reasoning above rules out. So the trigger in the
+> "When" column has passed without firing. The rename is now tied to the first
+> thing that genuinely recreates a resource, which in practice means a second
+> environment. The debt is unchanged in size and has lost its date.
+
 ## Known gaps
 
 From the audit, split by whether they block anything.
@@ -561,15 +576,75 @@ From the audit, split by whether they block anything.
   `GET /health 200 OK` from `127.0.0.1` every 30s; and a throwaway standalone
   task pointed at a non-existent path was reported `UNHEALTHY` within ~30s.
 
+- **Reproducible ingestion — done.** Roadmap step 2. S3 holds the documents and
+  their manifest; a one-off ECS task fetches them, verifies every `sha256`
+  before a `chunk` is embedded, and rebuilds the collection outright. The commit
+  message on `5c2fa58` carries the reasoning; `designs/ingestion.md` carries the
+  design. Its consequence for this document is that the corpus is no longer
+  "only on one machine", which was the stated blocker for everything downstream.
+
+- **Terraform for what exists — done.** Roadmap step 3. See **Infrastructure as
+  code** below for what is managed and what deliberately is not.
+
+- **`ALB` stood up, learned, and torn down — done, HTTP only.** Roadmap step 4,
+  and the exercise the ephemeral-infrastructure argument was written for.
+
+  An internet-facing `ALB` across all six subnets, one HTTP listener on `:80`
+  forwarding to a target group on `:8000` with `target_type = ip` — required,
+  not preferred, because a Fargate task under `awsvpc` owns an ENI and there is
+  no instance to register. Health check `GET /health`, matcher `200`.
+
+  Three things it demonstrated that are worth keeping:
+
+  **Two health checks on one path, answering different questions.** One log
+  stream carried probes from `127.0.0.1` (the ECS agent, inside the task) and
+  from two `172.31.x.x` addresses (the `ALB`'s nodes, across the ENI). The
+  container check asks *is this process alive*; the target group asks *should
+  this target receive traffic*. The first replaces a task, the second drains it
+  and leaves it running to be looked at.
+
+  **The task was never exposed.** `basic-rag-api-sg` admitted `:8000` only from
+  the `ALB`'s security group — by group reference, since `ALB` nodes hold
+  private IPs that change as it scales. A direct request to the task's public
+  address timed out while the same request through the `ALB` returned `200`.
+
+  **A deploy through a load balancer needs nothing extra.** CI moved the service
+  from `:6` to `:7` mid-exercise; ECS deregistered the old task's IP and
+  registered the new one unprompted, and `ci.yml` needed no change, because
+  `UpdateService` alters only what it is passed.
+
+  **The teardown failed twice, and both failures were ours.** Recorded because
+  neither is visible in a plan. A `dynamic "ingress"` block producing zero
+  blocks is indistinguishable, to the AWS provider, from not configuring ingress
+  at all — so the rule pointing at the `ALB`'s security group was silently kept,
+  the plan looked clean, and the delete failed for fifteen minutes with
+  `DependencyViolation`. An empty *list* assigned to the attribute is
+  unambiguous. Then, with that fixed, Terraform attempted the delete before the
+  revoke: with the `ALB` disabled the configuration no longer references the
+  group at all, so there is no dependency edge to order them, and `-target` does
+  not help because count-orphans are processed regardless. `var.keep_alb_sg`
+  lets the group outlive the rest of the `ALB` by one `apply`.
+
+  Detaching the load balancer also left the ECS service deadlocked at two
+  running tasks against a desired count of one: `maximumPercent` 200 of 1 is a
+  ceiling of two, two stale deployments held both slots, and the replacement
+  could not start. `force-new-deployment` made it worse by adding a third
+  deployment with nowhere to go. Stopping one stale task cleared it in three
+  minutes. Worth knowing before the rebuild.
+
+  Total cost, stood up to torn down: about three cents.
+
+- **Stale security group rule — removed.** `basic-rag-api-sg` no longer admits
+  `:8000` from `103.104.46.6/32`. The rule's own description said *"temporary:
+  direct access from my laptop (no ALB yet)"*, and it had been broken for days
+  anyway — the address had been reassigned, which is why the Issue #2 audit
+  could not reach the running API.
+
 ### Before DEV can be called reliable
 
 These are the ones worth doing next, and none of them needs a second
 environment.
 
-- **No reproducible ingestion.** The strategy is decided — Option A, full
-  rebuild, no `record_manager` — but nothing is built, and the source documents
-  are still only on one machine. The blocker for everything downstream.
-- **No IaC.** Covered below.
 - **The three chunking settings are absent from the task definition**, so
   `collection_name` depends on defaults agreeing across two codebases forever.
   Make `EMBEDDING_MODEL`, `CHUNK_SIZE` and `CHUNK_OVERLAP` explicit.
@@ -578,23 +653,35 @@ environment.
   from task definition revision `:1`, and `ecsTaskExecutionRole` still carries
   an inline policy granting access to it. Two places to rotate, one of which
   nothing reads. Delete the secret and the policy.
-- **Stale security group rule.** `basic-rag-api-sg` admits port 8000 from
-  `103.104.46.6/32`, a laptop IP that has already changed — the audit could not
-  reach the running API. The task's public IP also changes on every deployment.
-  Both are tolerable for DEV and both are friction every single session.
 - **No log retention on `/ecs/basic-rag-api`.** Grows forever. `/ecs/basic-rag-qdrant`
   has 7 days; match it.
 - **No backup of the vector data.** One EFS filesystem, no access point, and no
-  backup plan was found. Given that the corpus cannot currently be regenerated,
-  the only copy of the ingested `chunk`s is this filesystem.
+  backup plan. This is now the oldest untouched gap in the list, and ingestion
+  being reproducible softens it without closing it: the `chunk`s can be rebuilt
+  from S3, but only by a deliberate run, and an accidental deletion would still
+  be a restore-from-nothing.
+- **The API is currently unreachable.** `basic-rag-api-sg` has no ingress rules
+  at all since the `ALB` came down, which is correct — the load balancer was the
+  front door and there is deliberately no second one. It does mean `POST /query`
+  cannot be exercised against DEV until an `ALB` exists again. ECS Exec, step 5,
+  is the intended way back in for debugging; a hand-added CIDR rule is not.
 
 ### Later, and deliberately not now
 
-- **`ALB` and HTTPS.** They belong to PROD. They also have real learning value
-  on their own, which is addressed in the roadmap below rather than by building
-  an environment to hold them.
-- **A domain name.** No purchase yet. PROD cannot exist without one — ACM will
-  not issue a public certificate for an `…elb.amazonaws.com` name.
+- **`ALB` and HTTPS.** **Partly resolved.** The `ALB` half was built, verified
+  and torn down as roadmap step 4 — see *Closed*. HTTPS was not, and is blocked
+  below rather than deferred.
+- **A domain name.** Still no purchase, and this has been promoted from a
+  deferral to **the active blocker**. ACM refuses to issue a public certificate
+  for an `…elb.amazonaws.com` name — not as a setting but as an ownership
+  check, since AWS owns that domain and neither the DNS validation record nor
+  the validation email can be produced for it. So HTTPS cannot be rehearsed at
+  all, even temporarily, without a domain this account controls. Route 53's
+  registrar is unavailable on this account — `ListDomains` returns
+  `AccessDeniedException: Free Tier accounts are not supported` — so the
+  purchase has to happen at an external registrar, after which DNS can either
+  move to a Route 53 hosted zone (~$0.50/month, fully automatable) or stay at
+  the registrar (free, one manual CNAME during issuance).
 - **Monitoring and alarms.** Container Insights is disabled; there are no
   alarms. Worth doing, cheap, and not blocking.
 - **Autoscaling.** Meaningless at one user.
@@ -624,55 +711,71 @@ environment.
 The point of dropping STAGING and PROD is to spend the same effort on things
 that are actually unlearned. Ordered by what unblocks what:
 
-1. **Container health check.** Cheapest, highest value, makes every later step
-   verifiable.
-2. **Reproducible ingestion.** Its own `grill-me` session. Unblocks backup,
-   rebuild-from-scratch, and any second environment.
-3. **Terraform for what exists.** Turns DEV into something that can be
-   destroyed and recreated identically, which is the precondition for step 4.
-4. **Stand up an `ALB` with HTTPS, learn it, tear it down.** This is the move
-   that makes the roadmap affordable: with IaC in place, an `ALB` is an `apply`
-   and a `destroy`. You learn target groups, listeners, TLS termination and
-   health checks for a few dollars of uptime rather than $16/month forever —
-   **and you do it without creating an environment to hold it.**
+1. ~~**Container health check.**~~ **Done** — 2026-09-21. See *Closed*.
+2. ~~**Reproducible ingestion.**~~ **Done** — 2026-09-21. See *Closed*.
+3. ~~**Terraform for what exists.**~~ **Done** — 2026-09-21. See *Closed* and
+   **Infrastructure as code** below.
+4. **Stand up an `ALB` with HTTPS, learn it, tear it down.** **Half done.** The
+   `ALB` went up, was verified end to end over HTTP, and came down again, for
+   about three cents of uptime. **HTTPS is blocked on a domain** — see the
+   domain entry under *Later*, which has stopped being a deferral and become
+   the one thing this project now needs from outside itself.
 5. **Task role, then ECS Exec.** Least privilege, and the ability to get inside
-   a running task.
+   a running task. **This is now the next step.**
 6. **Alarms and log retention.** A few metric filters and an SNS topic.
 7. **Private subnets and VPC endpoints**, if the budget allows it, as a
    deliberate exercise rather than a requirement.
 
-**Steps 3 and 4 together are the argument of this whole document.** Ephemeral
-infrastructure is only affordable if recreating it is reliable, and recreating it
-is only reliable if it is code. That is a better reason for Terraform than
-avoiding drift, and it is specific to a project with this budget.
+**Steps 3 and 4 together are the argument of this whole document**, and the
+argument held. Ephemeral infrastructure is only affordable if recreating it is
+reliable, and recreating it is only reliable if it is code. The `ALB` was two
+`apply`s against code that had already proved it matched reality, and the entire
+exercise cost roughly three cents rather than $16 a month forever.
+
+What the exercise actually taught, beyond the AWS concepts, was that a plan can
+be clean and wrong. Both teardown failures came from this repository's own
+Terraform, not from AWS — see *Closed* below.
 
 ## Infrastructure as code
 
-**Not implemented here, and not a prerequisite for reading this document.**
+**Implemented — 2026-09-21.** Terraform, in `infra/`. The estate was adopted by
+`import`, not recreated: nothing was destroyed and nothing was rebuilt, and the
+running API task kept the same id straight through the adoption.
 
-Every resource in the audit was created by hand, and `ci.yml` deliberately reads
-the live task definition rather than a copy in the repo — so the running
-configuration exists only in AWS, where it cannot be diffed, reviewed, or
-restored.
+Twenty-one resources are managed — the cluster, both services, the Qdrant task
+definition, three security groups, the EFS filesystem and its six mount targets,
+the Cloud Map namespace and its service, and three log groups.
 
-With one hand-built environment that is survivable. Two things make it stop
-being survivable, and neither of them is a second environment:
+**The bar was a second `plan` reporting no changes**, and that is the whole
+point of the step rather than a nicety. Code that merely creates similar
+resources is a description of an idea; code whose `plan` is empty against the
+live estate is a description of the estate. Reaching it took four corrections,
+each of them this repository being wrong about AWS rather than the reverse.
 
-- **Ephemeral infrastructure needs reproducible infrastructure.** The roadmap
-  above depends on standing things up and tearing them down. That is only safe
-  if `apply` produces the same result every time.
-- **A second environment would be a hand-made copy of something with no
-  written source.** Applying one module twice is the only thing that genuinely
-  rehearses resource creation.
+Four things sit outside Terraform, each for a reason worth keeping:
 
-**Terraform is the likely tool**, for no more exciting reason than that it is
-what the surrounding job market uses. CloudFormation and CDK would both work.
-Choosing is its own session, and the choice does not change anything above.
+- **The default VPC and its subnets are data sources, never managed.** Owning
+  them would put `destroy` one command away from deleting the VPC that
+  everything else in the account also sits in.
+- **The `basic-rag-api` task definition is not managed.** `ci.yml` registers a
+  revision on every deploy; two owners of one resource means every `plan` shows
+  drift and every `apply` fights the pipeline. The service carries
+  `ignore_changes = [task_definition]` instead. That has since survived three CI
+  deploys — `:6` to `:7` to `:8` — with `plan` still reporting no changes.
+- **The SSM parameter is never read.** `data "aws_ssm_parameter"` decrypts by
+  default, which would write the OpenRouter key into `terraform.tfstate`.
+- **IAM roles and both ECR repositories are out.** Shared and never renamed; a
+  `destroy` should not be able to reach them.
 
-A cheaper interim step, if Terraform slips: **commit both task definitions to
-the repo** and have CI render from the committed file instead of calling
-`describe-task-definition`. That alone makes the running configuration
-reviewable, and it is perhaps an hour of work.
+**State is local**, `infra/terraform.tfstate`, gitignored. Adequate for one
+person on one machine and inadequate the moment there are two of either. An S3
+backend with a lock is the next hardening step and it is small.
+
+The cheaper interim step this section used to propose — committing both task
+definitions and having CI render from the repo — was not taken. Qdrant's is now
+Terraform; the API's is still live-only, so its container definition remains
+unreviewable in the repo. That is the accepted price of not fighting the
+pipeline, and it is a trade rather than an oversight.
 
 ## When this design expires
 
